@@ -1,9 +1,11 @@
 package com.pipis.os
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,16 +23,19 @@ import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +44,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.style.TextAlign
 
 private val Background = Color(0xFF09070F)
 private val Panel = Color(0xFF171222)
-private val Purple = Color(0xFF9B6DFF)
 private val Muted = Color(0xFFB8AEC9)
 
 class MainActivity : ComponentActivity() {
@@ -55,6 +65,57 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun PipOSApp() {
     var selected by remember { mutableStateOf("Главная") }
+    var settings by remember { mutableStateOf(PipOSSettings()) }
+    var status by remember { mutableStateOf("Резервная копия хранит настройки PipOS в ZIP-архиве.") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val accent = remember(settings.accentColor) {
+        runCatching { Color(android.graphics.Color.parseColor(settings.accentColor)) }
+            .getOrDefault(Color(0xFF9B6DFF))
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        if (uri == null) {
+            status = "Экспорт отменён."
+        } else {
+            scope.launch {
+                val result = runCatching {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        PipOSBackup.export(context, uri, settings)
+                    }
+                }
+                status = result.fold(
+                    onSuccess = { "Архив PipOS успешно сохранён." },
+                    onFailure = { "Ошибка экспорта: ${it.message ?: "неизвестная ошибка"}" }
+                )
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) {
+            status = "Импорт отменён."
+        } else {
+            scope.launch {
+                val result = runCatching {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        PipOSBackup.import(context, uri)
+                    }
+                }
+                result.onSuccess {
+                    settings = it
+                    status = "Настройки успешно восстановлены из архива."
+                }.onFailure {
+                    status = "Ошибка импорта: ${it.message ?: "неизвестная ошибка"}"
+                }
+            }
+        }
+    }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Background) {
             Column(
@@ -63,6 +124,7 @@ private fun PipOSApp() {
             ) {
                 Text("PipOS", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black)
                 Text("Твоя система. Твои правила.", color = Muted, fontSize = 14.sp)
+
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Panel),
                     shape = RoundedCornerShape(22.dp),
@@ -74,7 +136,8 @@ private fun PipOSApp() {
                         Text("Настраивай внешний вид Android и собирай собственный набор оформления.", color = Muted, fontSize = 13.sp)
                     }
                 }
-                Text("ИНСТРУМЕНТЫ", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+
+                Text("ИНСТРУМЕНТЫ", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 val items = listOf(
                     Tool("Темы", "Цвета и оформление", Icons.Rounded.Brush),
                     Tool("Иконки", "Набор значков приложений", Icons.Rounded.Apps),
@@ -83,22 +146,47 @@ private fun PipOSApp() {
                     Tool("Коллекция", "Твои пакеты оформления", Icons.Rounded.Collections),
                     Tool("Резервная копия", "Экспорт и импорт настроек", Icons.Rounded.Backup)
                 )
+
                 items.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         pair.forEach { tool ->
-                            ToolCard(tool, Modifier.weight(1f)) { selected = tool.title }
+                            ToolCard(tool, accent, Modifier.weight(1f)) { selected = tool.title }
                         }
                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    if (selected == "Главная") "PipOS Android • ранняя сборка 0.1.0"
-                    else "$selected — скоро здесь появятся настройки",
-                    color = Muted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+
+                if (selected == "Резервная копия") {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Panel),
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Перенос PipOS", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text("Создай ZIP-файл, чтобы перенести текущие настройки на другое устройство.", color = Muted, fontSize = 12.sp)
+                            Button(
+                                onClick = { exportLauncher.launch("PipOS-backup.zip") },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent)
+                            ) { Text("Экспортировать ZIP", color = Color.White) }
+                            OutlinedButton(
+                                onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Импортировать ZIP", color = Color.White) }
+                            Text(status, color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    Text(
+                        if (selected == "Главная") "PipOS Android • ранняя сборка 0.2.0"
+                        else "$selected — следующий раздел в разработке",
+                        color = Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -107,7 +195,7 @@ private fun PipOSApp() {
 private data class Tool(val title: String, val subtitle: String, val icon: ImageVector)
 
 @Composable
-private fun ToolCard(tool: Tool, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ToolCard(tool: Tool, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
         modifier = modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = Panel),
@@ -117,7 +205,7 @@ private fun ToolCard(tool: Tool, modifier: Modifier = Modifier, onClick: () -> U
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(tool.icon, contentDescription = null, tint = Purple)
+            Icon(tool.icon, contentDescription = null, tint = accent)
             Text(tool.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Text(tool.subtitle, color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
         }
