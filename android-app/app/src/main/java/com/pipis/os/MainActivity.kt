@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
@@ -33,6 +35,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,14 +75,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun PipOSApp() {
-    var selected by remember { mutableStateOf("Главная") }
-    var settings by remember { mutableStateOf(PipOSSettings()) }
-    var status by remember { mutableStateOf("Резервная копия хранит настройки PipOS в ZIP-архиве.") }
     val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("pipos_preferences", android.content.Context.MODE_PRIVATE)
+    }
+    var selected by remember { mutableStateOf("Главная") }
+    var settings by remember {
+        mutableStateOf(
+            PipOSSettings(
+                themeName = preferences.getString("theme_name", "Void Purple") ?: "Void Purple",
+                accentColor = preferences.getString("accent_color", "#9B6DFF") ?: "#9B6DFF"
+            )
+        )
+    }
+    var status by remember { mutableStateOf("Резервная копия хранит настройки PipOS в ZIP-архиве.") }
     val scope = rememberCoroutineScope()
     val accent = remember(settings.accentColor) {
         runCatching { Color(android.graphics.Color.parseColor(settings.accentColor)) }
             .getOrDefault(Color(0xFF9B6DFF))
+    }
+
+    LaunchedEffect(settings.themeName, settings.accentColor) {
+        preferences.edit()
+            .putString("theme_name", settings.themeName)
+            .putString("accent_color", settings.accentColor)
+            .apply()
     }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -127,7 +147,10 @@ private fun PipOSApp() {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Background) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 28.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 Text("PipOS", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black)
@@ -195,7 +218,7 @@ private fun PipOSApp() {
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text("Цветовая тема", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                Text("Выбери акцентный цвет PipOS. Он сразу применяется к интерфейсу приложения и сохраняется в резервной копии.", color = Muted, fontSize = 12.sp)
+                                Text("Выбери акцентный цвет PipOS. Он сразу применяется к интерфейсу приложения и сохраняется на устройстве.", color = Muted, fontSize = 12.sp)
                                 themePresets.chunked(2).forEach { pair ->
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         pair.forEach { preset ->
@@ -228,19 +251,34 @@ private fun PipOSApp() {
                         }
                     }
                     "Главная" -> Text(
-                        "PipOS Android • версия 0.2.0",
+                        "PipOS Android • версия 0.3.0",
                         color = Muted,
                         fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center
                     )
-                    else -> Text(
-                        "$selected — этот раздел появится в следующем обновлении.",
-                        color = Muted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+                    else -> Card(
+                        colors = CardDefaults.cardColors(containerColor = Panel),
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(selected, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                when (selected) {
+                                    "Иконки" -> "Раздел подготовлен. Импорт и применение наборов значков добавим следующим этапом."
+                                    "Шрифты" -> "Раздел подготовлен. Здесь появится импорт шрифтов и поддерживаемых пакетов."
+                                    "Обои" -> "Раздел подготовлен. Здесь появится выбор изображения и установка обоев."
+                                    else -> "Здесь будут собираться и храниться твои наборы оформления."
+                                },
+                                color = Muted,
+                                fontSize = 12.sp
+                            )
+                            OutlinedButton(onClick = { selected = "Главная" }) {
+                                Text("На главную", color = Color.White)
+                            }
+                        }
+                    }
                 }
             }
         }
