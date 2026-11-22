@@ -52,9 +52,15 @@ object PipOSBackup {
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     if (!entry.isDirectory && entry.name == SETTINGS_FILE) {
-                        val bytes = zip.readNBytes(MAX_SETTINGS_BYTES + 1)
-                        require(bytes.size <= MAX_SETTINGS_BYTES) { "Файл настроек слишком большой" }
-                        settingsJson = bytes.toString(Charsets.UTF_8)
+                        val buffer = ByteArray(8192)
+                        val output = java.io.ByteArrayOutputStream()
+                        while (true) {
+                            val count = zip.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                            require(output.size() <= MAX_SETTINGS_BYTES) { "Файл настроек слишком большой" }
+                        }
+                        settingsJson = output.toByteArray().toString(Charsets.UTF_8)
                         break
                     }
                     zip.closeEntry()
