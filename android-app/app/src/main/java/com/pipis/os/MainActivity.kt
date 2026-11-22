@@ -48,12 +48,20 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.style.TextAlign
 
 private val Background = Color(0xFF09070F)
 private val Panel = Color(0xFF171222)
 private val Muted = Color(0xFFB8AEC9)
+
+private val themePresets = listOf(
+    "Void Purple" to "#9B6DFF",
+    "Cyber Blue" to "#42B8FF",
+    "Neon Green" to "#65E68A",
+    "Crimson" to "#FF5577",
+    "Amber" to "#FFB74D",
+    "Ice" to "#75E5E8"
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -156,31 +164,78 @@ private fun PipOSApp() {
                     }
                 }
 
-                if (selected == "Резервная копия") {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Panel),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Перенос PipOS", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Text("Создай ZIP-файл, чтобы перенести текущие настройки на другое устройство.", color = Muted, fontSize = 12.sp)
-                            Button(
-                                onClick = { exportLauncher.launch("PipOS-backup.zip") },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(containerColor = accent)
-                            ) { Text("Экспортировать ZIP", color = Color.White) }
-                            OutlinedButton(
-                                onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Импортировать ZIP", color = Color.White) }
-                            Text(status, color = Muted, fontSize = 11.sp)
+                when (selected) {
+                    "Резервная копия" -> {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Panel),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Перенос PipOS", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                Text("Создай ZIP-файл, чтобы перенести текущие настройки на другое устройство.", color = Muted, fontSize = 12.sp)
+                                Button(
+                                    onClick = { exportLauncher.launch("PipOS-backup.zip") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                                ) { Text("Экспортировать ZIP", color = Color.White) }
+                                OutlinedButton(
+                                    onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Импортировать ZIP", color = Color.White) }
+                                Text(status, color = Muted, fontSize = 11.sp)
+                            }
                         }
                     }
-                } else {
-                    Text(
-                        if (selected == "Главная") "PipOS Android • ранняя сборка 0.2.0"
-                        else "$selected — следующий раздел в разработке",
+                    "Темы" -> {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Panel),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("Цветовая тема", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Выбери акцентный цвет PipOS. Он сразу применяется к интерфейсу приложения и сохраняется в резервной копии.", color = Muted, fontSize = 12.sp)
+                                themePresets.chunked(2).forEach { pair ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        pair.forEach { preset ->
+                                            val presetColor = Color(android.graphics.Color.parseColor(preset.second))
+                                            Card(
+                                                modifier = Modifier.weight(1f).clickable {
+                                                    settings = settings.copy(themeName = preset.first, accentColor = preset.second)
+                                                },
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF211A30)),
+                                                shape = RoundedCornerShape(14.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Rounded.Brush, contentDescription = null, tint = presetColor)
+                                                    Column {
+                                                        Text(preset.first, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                        Text(preset.second, color = Muted, fontSize = 10.sp)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                    }
+                                }
+                                Text("Активная тема: ${settings.themeName}", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    "Главная" -> Text(
+                        "PipOS Android • версия 0.2.0",
+                        color = Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                    else -> Text(
+                        "$selected — этот раздел появится в следующем обновлении.",
                         color = Muted,
                         fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth(),
