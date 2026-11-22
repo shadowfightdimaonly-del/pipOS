@@ -28,7 +28,7 @@ object PipOSBackup {
         val manifest = JSONObject().apply {
             put("format", "pipOS-backup")
             put("formatVersion", 1)
-            put("appVersion", "0.1.0")
+            put("appVersion", "0.2.0")
             put("createdAt", System.currentTimeMillis())
         }
 
