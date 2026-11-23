@@ -3,13 +3,14 @@ package com.pipis.os
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,7 +58,7 @@ private val LauncherAccent = Color(0xFFB58AFF)
 private val LauncherText = Color(0xFFF7F2FF)
 private val LauncherMuted = Color(0xFFB8AEC9)
 
-private data class LauncherApp(val label: String, val packageName: String, val icon: Bitmap)
+private data class LauncherApp(val label: String, val packageName: String)
 
 class HomeScreenActivity : ComponentActivity() {
     private var launcherApps by mutableStateOf<List<LauncherApp>>(emptyList())
@@ -109,7 +109,7 @@ class HomeScreenActivity : ComponentActivity() {
             if (isSystem && !isAllowedBuiltInApp(appPackage)) return@mapNotNull null
 
             val label = info.loadLabel(packageManager).toString()
-            LauncherApp(label, appPackage, makeAppIcon(info.activityInfo.loadIcon(packageManager)))
+            LauncherApp(label, appPackage)
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
@@ -130,21 +130,7 @@ class HomeScreenActivity : ComponentActivity() {
         return appPackage in visibleBuiltIns
     }
 
-    private fun makeAppIcon(drawable: android.graphics.drawable.Drawable): Bitmap {
-        val bitmap = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val icon = drawable.mutate()
-        val width = (icon.intrinsicWidth.takeIf { it > 0 } ?: 128).toFloat()
-        val height = (icon.intrinsicHeight.takeIf { it > 0 } ?: 128).toFloat()
-        val scale = 152f / maxOf(width, height)
-        val iconWidth = width * scale
-        val iconHeight = height * scale
-        val left = ((192f - iconWidth) / 2f).toInt()
-        val top = ((192f - iconHeight) / 2f).toInt()
-        icon.setBounds(left, top, (left + iconWidth).toInt(), (top + iconHeight).toInt())
-        icon.draw(canvas)
-        return bitmap
-    }
+
 }
 
 @Composable
@@ -201,7 +187,7 @@ private fun PipOSLauncher(
                     .background(LauncherPanel)
                     .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
-                Text(timeText, color = LauncherText, fontSize = 58.sp, lineHeight = 64.sp, fontWeight = FontWeight.Light)
+                Text(timeText, color = LauncherText, fontSize = 66.sp, lineHeight = 72.sp, fontWeight = FontWeight.Light)
                 Spacer(Modifier.height(2.dp))
                 Text(dateText, color = LauncherAccent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
@@ -245,11 +231,7 @@ private fun PipOSLauncher(
                             .padding(vertical = 7.dp, horizontal = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            bitmap = app.icon.asImageBitmap(),
-                            contentDescription = "Иконка ${app.label}",
-                            modifier = Modifier.size(52.dp)
-                        )
+                        PipOSAppIcon(app = app, modifier = Modifier.size(58.dp))
                         Spacer(Modifier.height(7.dp))
                         Text(
                             app.label,
@@ -271,5 +253,87 @@ private fun PipOSLauncher(
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+
+@Composable
+private fun PipOSAppIcon(app: LauncherApp, modifier: Modifier = Modifier) {
+    val symbol = remember(app.packageName, app.label) { appSymbol(app.packageName, app.label) }
+    Canvas(modifier = modifier) {
+        val native = drawContext.canvas.nativeCanvas
+        val save = native.save()
+        native.scale(size.width / 108f, size.height / 108f)
+
+        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            style = Paint.Style.FILL
+        }
+        native.drawRoundRect(2f, 2f, 106f, 106f, 25f, 25f, background)
+
+        // The same purple folder silhouette used by PipisEdit.
+        val folder = Path().apply {
+            moveTo(30f, 35f)
+            lineTo(48f, 35f)
+            lineTo(54f, 42f)
+            lineTo(78f, 42f)
+            cubicTo(79.7f, 42f, 81f, 43.3f, 81f, 45f)
+            lineTo(81f, 73f)
+            cubicTo(81f, 74.7f, 79.7f, 76f, 78f, 76f)
+            lineTo(30f, 76f)
+            cubicTo(28.3f, 76f, 27f, 74.7f, 27f, 73f)
+            lineTo(27f, 38f)
+            cubicTo(27f, 36.3f, 28.3f, 35f, 30f, 35f)
+            close()
+        }
+        val purple = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(156, 77, 255)
+            style = Paint.Style.FILL
+        }
+        native.drawPath(folder, purple)
+
+        val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            textSize = when {
+                symbol.length >= 4 -> 15f
+                symbol.length == 3 -> 19f
+                symbol.length == 2 -> 25f
+                else -> 34f
+            }
+        }
+        val baseline = 59f - (glyph.ascent() + glyph.descent()) / 2f
+        native.drawText(symbol, 54f, baseline, glyph)
+        native.restoreToCount(save)
+    }
+}
+
+private fun appSymbol(packageName: String, label: String): String {
+    val id = packageName.lowercase(Locale.ROOT)
+    return when {
+        "youtube" in id -> "YT"
+        "tiktok" in id -> "TT"
+        "minecraft" in id -> "MC"
+        "chrome" in id -> "CH"
+        "telegram" in id -> "TG"
+        "whatsapp" in id -> "WA"
+        "instagram" in id -> "IG"
+        "facebook" in id -> "FB"
+        "messenger" in id -> "MSG"
+        "gmail" in id -> "GM"
+        "google" in id -> "G"
+        "github" in id -> "GH"
+        "camera" in id -> "CAM"
+        "gallery" in id || "photos" in id -> "PH"
+        "settings" in id -> "SET"
+        "dialer" in id || "phone" in id -> "TEL"
+        "contacts" in id -> "CT"
+        "calendar" in id -> "CAL"
+        "clock" in id || "deskclock" in id -> "CLK"
+        "calculator" in id -> "CALC"
+        "files" in id || "documentsui" in id -> "FILE"
+        "play" in id && "store" in id -> "PLAY"
+        else -> label.trim().take(2).uppercase(Locale.getDefault()).ifBlank { "?" }
     }
 }
