@@ -299,7 +299,7 @@ private fun PipOSLauncher(
 
 
 @Composable
-private fun BlackHoleWallpaper(modifier: Modifier = Modifier) {
+internal fun BlackHoleWallpaper(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         drawRect(Color(0xFF030108))
         val center = Offset(size.width * 0.5f, size.height * 0.59f)
