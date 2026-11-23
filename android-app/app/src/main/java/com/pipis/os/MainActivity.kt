@@ -106,6 +106,9 @@ private fun PipOSApp() {
             )
         )
     }
+    var wallpaperEnabled by remember {
+        mutableStateOf(preferences.getBoolean("wallpaper_enabled", true))
+    }
     var status by remember { mutableStateOf("Резервная копия хранит настройки PipOS в ZIP-архиве.") }
     var iconStatus by remember { mutableStateOf("Выбери приложение и изображение для новой иконки.") }
     var appMenuExpanded by remember { mutableStateOf(false) }
@@ -138,6 +141,10 @@ private fun PipOSApp() {
             .putString("theme_name", settings.themeName)
             .putString("accent_color", settings.accentColor)
             .apply()
+    }
+
+    LaunchedEffect(wallpaperEnabled) {
+        preferences.edit().putBoolean("wallpaper_enabled", wallpaperEnabled).apply()
     }
 
     LaunchedEffect(context) {
@@ -309,7 +316,32 @@ private fun PipOSApp() {
                             }
                         }
                     }
-                    "Главная" -> Text("PipOS Android • версия 0.3.1", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    "Обои" -> {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("Космические обои", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Чёрная дыра с глубокими фиолетовыми кольцами. Фон применяется к обеим страницам рабочего стола и сохраняется после перезапуска.", color = Muted, fontSize = 12.sp)
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier.weight(1f).height(92.dp).clip(RoundedCornerShape(14.dp))
+                                            .background(Color(0xFF08030F))
+                                    ) {
+                                        BlackHoleWallpaper(Modifier.fillMaxSize())
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(if (wallpaperEnabled) "Обои включены" else "Обои выключены", color = accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Button(onClick = { wallpaperEnabled = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                                            Text("Применить", color = Color.White)
+                                        }
+                                        OutlinedButton(onClick = { wallpaperEnabled = false }, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Отключить", color = Color.White)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "Главная" -> Text("PipOS Android • версия 0.4.2", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     else -> Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(selected, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
