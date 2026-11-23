@@ -9,6 +9,7 @@ import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -174,6 +175,45 @@ class PipOSNotificationListener : NotificationListenerService() {
         outer.setOnClickListener {
             removeCurrentCard()
             runCatching { contentIntent?.send() }
+        }
+
+        // Horizontal swipe dismisses the PipOS heads-up card without touching
+        // the original Android notification or its notification-shade entry.
+        var downX = 0f
+        var downY = 0f
+        outer.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (kotlin.math.abs(dx) > kotlin.math.abs(dy) && kotlin.math.abs(dx) > d(12)) {
+                        view.translationX = dx
+                        view.alpha = (1f - kotlin.math.abs(dx) / (view.width.coerceAtLeast(1) * 1.2f)).coerceIn(0.35f, 1f)
+                    }
+                    false
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (kotlin.math.abs(dx) > d(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
+                        removeCurrentCard()
+                        true
+                    } else {
+                        view.animate().translationX(0f).alpha(1f).setDuration(140).start()
+                        false
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    view.animate().translationX(0f).alpha(1f).setDuration(140).start()
+                    false
+                }
+                else -> false
+            }
         }
 
         val params = WindowManager.LayoutParams(
