@@ -50,6 +50,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -123,6 +127,7 @@ private val dockFolders = listOf(
 
 class HomeScreenActivity : ComponentActivity() {
     private var launcherApps by mutableStateOf<List<LauncherApp>>(emptyList())
+    private var wallpaperEnabled by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -131,6 +136,7 @@ class HomeScreenActivity : ComponentActivity() {
             MaterialTheme {
                 PipOSLauncher(
                     apps = launcherApps,
+                    showWallpaper = wallpaperEnabled,
                     onLaunch = { packageName ->
                         packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it) }
                     },
@@ -142,6 +148,8 @@ class HomeScreenActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        wallpaperEnabled = getSharedPreferences("pipos_preferences", MODE_PRIVATE)
+            .getBoolean("wallpaper_enabled", true)
         lifecycleScope.launch {
             val loadedApps = withContext(Dispatchers.IO) { loadLauncherApps() }
             launcherApps = loadedApps
@@ -176,6 +184,7 @@ private object WindowCompatCompat {
 @Composable
 private fun PipOSLauncher(
     apps: List<LauncherApp>,
+    showWallpaper: Boolean,
     onLaunch: (String) -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -184,7 +193,12 @@ private fun PipOSLauncher(
     var dragTotal by remember { mutableStateOf(0f) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = LauncherBackground) {
-        Column(
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (showWallpaper) {
+                BlackHoleWallpaper(Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)))
+            }
+            Column(
             modifier = Modifier.fillMaxSize().pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { _, amount -> dragTotal += amount },
@@ -266,6 +280,7 @@ private fun PipOSLauncher(
                     )
                 }
             }
+            }
         }
     }
 
@@ -279,6 +294,68 @@ private fun PipOSLauncher(
                 onLaunch(packageName)
             }
         )
+    }
+}
+
+
+@Composable
+private fun BlackHoleWallpaper(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        drawRect(Color(0xFF030108))
+        val center = Offset(size.width * 0.5f, size.height * 0.59f)
+        val radius = size.minDimension * 0.37f
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF7B20E8).copy(alpha = 0.46f), Color(0xFF25064A).copy(alpha = 0.22f), Color.Transparent),
+                center = center,
+                radius = radius * 1.85f
+            ),
+            radius = radius * 1.85f,
+            center = center
+        )
+        rotate(17f, pivot = center) {
+            val ringColors = listOf(Color(0xFF3A087A), Color(0xFFC15BFF), Color(0xFF5D16C9), Color(0xFFE5B5FF), Color(0xFF32065F))
+            drawOval(
+                brush = Brush.linearGradient(ringColors),
+                topLeft = Offset(center.x - radius * 1.75f, center.y - radius * 0.58f),
+                size = androidx.compose.ui.geometry.Size(radius * 3.5f, radius * 1.16f),
+                style = Stroke(width = radius * 0.20f)
+            )
+            drawOval(
+                brush = Brush.linearGradient(listOf(Color(0xFF17032F), Color(0xFFB34BFF), Color(0xFF5B13C5), Color(0xFF160226))),
+                topLeft = Offset(center.x - radius * 1.55f, center.y - radius * 0.43f),
+                size = androidx.compose.ui.geometry.Size(radius * 3.1f, radius * 0.86f),
+                style = Stroke(width = radius * 0.075f)
+            )
+            drawOval(
+                color = Color(0xFFD7A0FF).copy(alpha = 0.82f),
+                topLeft = Offset(center.x - radius * 1.42f, center.y - radius * 0.30f),
+                size = androidx.compose.ui.geometry.Size(radius * 2.84f, radius * 0.60f),
+                style = Stroke(width = radius * 0.018f)
+            )
+        }
+        drawCircle(Color(0xFF020104), radius = radius * 0.72f, center = center)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color.Black, Color(0xFF05010A), Color(0xFF35105A).copy(alpha = 0.8f), Color.Transparent),
+                center = center,
+                radius = radius * 0.94f
+            ),
+            radius = radius * 0.94f,
+            center = center
+        )
+        val stars = listOf(
+            0.08f to 0.12f, 0.19f to 0.24f, 0.83f to 0.14f, 0.72f to 0.32f,
+            0.12f to 0.48f, 0.91f to 0.56f, 0.25f to 0.78f, 0.82f to 0.86f,
+            0.48f to 0.08f, 0.61f to 0.93f, 0.04f to 0.91f, 0.96f to 0.38f
+        )
+        stars.forEachIndexed { index, point ->
+            drawCircle(
+                color = if (index % 3 == 0) Color(0xFFD8A8FF).copy(alpha = 0.9f) else Color(0xFF9B58E8).copy(alpha = 0.65f),
+                radius = if (index % 3 == 0) 2.2f else 1.2f,
+                center = Offset(size.width * point.first, size.height * point.second)
+            )
+        }
     }
 }
 
