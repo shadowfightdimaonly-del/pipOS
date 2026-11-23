@@ -790,7 +790,7 @@ private fun AppIcon(
     app: LauncherApp? = null,
     modifier: Modifier = Modifier
 ) {
-    val kind = remember(label) { iconKind(label) }
+    val kind = remember(label, app?.packageName) { iconKind(label, app?.packageName) }
     val bgPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.rgb(19, 13, 30)
@@ -832,7 +832,7 @@ private fun AppIcon(
     }
 }
 
-private fun iconKind(label: String): String {
+private fun iconKind(label: String, packageName: String? = null): String {
     val v = normalize(label)
     return when {
         "telegram" in v -> "telegram"
@@ -862,7 +862,21 @@ private fun iconKind(label: String): String {
         "калькулятор" in v -> "calculator"
         "телефон" in v || "phone" in v -> "phone"
         "карты" in v || "maps" in v -> "pin"
-        else -> "app"
+        "instagram" in v -> "camera"
+        "discord" in v -> "chat"
+        "spotify" in v || "music" in v || "музык" in v -> "music"
+        "facebook" in v || "вконтакте" in v || v == "vk" -> "social"
+        "файл" in v || "files" in v || "проводник" in v || "zarchiver" in v -> "folder"
+        "час" in v || "clock" in v || "alarm" in v -> "clock"
+        "погод" in v || "weather" in v -> "weather"
+        "замет" in v || "notes" in v -> "note"
+        "контакт" in v || "contacts" in v -> "contacts"
+        "документ" in v || "docs" in v || "word" in v -> "document"
+        "таблиц" in v || "sheets" in v || "excel" in v -> "table"
+        "калькулятор" in v || "calculator" in v -> "calculator"
+        "settings" in v || "настрой" in v -> "gear"
+        "галере" in v || "photos" in v || "фото" in v -> "photo"
+        else -> "custom_" + (((packageName ?: v).hashCode() and 0x7fffffff) % 12)
     }
 }
 
