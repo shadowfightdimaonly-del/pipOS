@@ -288,7 +288,7 @@ private fun ClockOnlyScreen() {
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = System.currentTimeMillis()
-            delay(60_000)
+            delay(60_000 - (System.currentTimeMillis() % 60_000))
         }
     }
     val timeText = remember(currentTime) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(currentTime)) }
@@ -492,7 +492,9 @@ private fun findApp(requested: String, apps: List<LauncherApp>): LauncherApp? {
     return apps.firstOrNull { normalize(it.label) in aliases }
         ?: apps.firstOrNull { candidate ->
             val label = normalize(candidate.label)
-            aliases.any { alias -> alias.length > 3 && (label.contains(alias) || alias.contains(label)) }
+            label.length > 3 && aliases.any { alias ->
+                alias.length > 3 && (label.contains(alias) || alias.contains(label))
+            }
         }
 }
 
@@ -510,6 +512,8 @@ private fun iconSymbol(label: String): String {
         "whatsapp" in value -> "WA"
         "instagram" in value -> "IG"
         "gmail" in value -> "GM"
+        "googleplay" in value || "playstore" in value -> "GP"
+        "googlemaps" in value || "googleкарты" in value || "яндекскарты" in value -> "MAP"
         "google" in value -> "G"
         "github" in value -> "GH"
         "chatgpt" in value -> "GPT"
