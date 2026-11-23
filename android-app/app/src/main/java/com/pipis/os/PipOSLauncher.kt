@@ -12,7 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +30,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -55,7 +56,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -188,9 +188,9 @@ private fun PipOSLauncher(
     onLaunch: (String) -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    var page by remember { mutableStateOf(0) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val page = pagerState.currentPage
     var openedFolder by remember { mutableStateOf<DesktopEntry?>(null) }
-    var dragTotal by remember { mutableStateOf(0f) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = LauncherBackground) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -198,88 +198,83 @@ private fun PipOSLauncher(
                 BlackHoleWallpaper(Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)))
             }
-            Column(
-            modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { _, amount -> dragTotal += amount },
-                    onDragEnd = {
-                        if (dragTotal < -55f) page = 1
-                        if (dragTotal > 55f) page = 0
-                        dragTotal = 0f
-                    }
-                )
-            }
-        ) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (page == 0) {
-                    ClockOnlyScreen()
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text("PipOS", color = LauncherText, fontSize = 23.sp, fontWeight = FontWeight.Black)
-                                Text("YOUR SPACE", color = LauncherAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.5.sp)
-                            }
-                            TextButton(onClick = onOpenSettings) { Text("Настройки", color = LauncherAccent) }
-                        }
-                        desktopRows.forEachIndexed { rowIndex, row ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                row.forEach { entry ->
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        DesktopTile(
-                                            entry = entry,
-                                            isAi = entry.title == "Штаб ИИ",
-                                            app = findApp(entry.title, apps),
-                                            onOpenFolder = { openedFolder = entry },
-                                            onLaunch = onLaunch,
-                                            onOpenSettings = onOpenSettings
-                                        )
-                                    }
-                                }
-                                repeat((4 - row.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
-                            }
-                        }
-                    }
-                }
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                dockFolders.forEach { folder ->
-                    Box(modifier = Modifier.weight(1f)) {
-                        DockFolder(folder = folder, onClick = { openedFolder = folder })
+            Column(modifier = Modifier.fillMaxSize()) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    beyondViewportPageCount = 1
+                ) { pageIndex ->
+                    if (pageIndex == 0) {
+                        ClockOnlyScreen()
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("PipOS", color = LauncherText, fontSize = 23.sp, fontWeight = FontWeight.Black)
+                                    Text("YOUR SPACE", color = LauncherAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.5.sp)
+                                }
+                                TextButton(onClick = onOpenSettings) { Text("Настройки", color = LauncherAccent) }
+                            }
+                            desktopRows.forEach { row ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    row.forEach { entry ->
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            DesktopTile(
+                                                entry = entry,
+                                                isAi = entry.title == "Штаб ИИ",
+                                                app = findApp(entry.title, apps),
+                                                onOpenFolder = { openedFolder = entry },
+                                                onLaunch = onLaunch,
+                                                onOpenSettings = onOpenSettings
+                                            )
+                                        }
+                                    }
+                                    repeat((4 - row.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
+                                }
+                            }
+                        }
                     }
                 }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(2) { index ->
-                    Box(
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                            .size(if (page == index) 7.dp else 5.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(if (page == index) LauncherAccent else LauncherMuted.copy(alpha = 0.45f))
-                    )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    dockFolders.forEach { folder ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            DockFolder(folder = folder, onClick = { openedFolder = folder })
+                        }
+                    }
                 }
-            }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(2) { index ->
+                        Box(
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                                .size(if (page == index) 7.dp else 5.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(if (page == index) LauncherAccent else LauncherMuted.copy(alpha = 0.45f))
+                        )
+                    }
+                }
             }
         }
     }
@@ -296,7 +291,6 @@ private fun PipOSLauncher(
         )
     }
 }
-
 
 @Composable
 internal fun BlackHoleWallpaper(modifier: Modifier = Modifier) {
