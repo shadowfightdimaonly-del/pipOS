@@ -1,6 +1,7 @@
 package com.pipis.os
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -37,6 +38,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,6 +73,8 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val LauncherBackground = Color(0xFF08060D)
 private val LauncherPanel = Color(0xFF171020)
@@ -79,8 +83,12 @@ private val LauncherText = Color(0xFFF7F2FF)
 private val LauncherMuted = Color(0xFFB8AEC9)
 
 private data class LauncherApp(val label: String, val packageName: String)
-private data class DesktopEntry(val title: String, val children: List<String> = emptyList()) {
-    val isFolder: Boolean get() = children.isNotEmpty()
+private data class DesktopEntry(
+    val title: String,
+    val children: List<String> = emptyList(),
+    val folder: Boolean = false
+) {
+    val isFolder: Boolean get() = folder || children.isNotEmpty()
 }
 
 private class AppLookup(apps: List<LauncherApp>) {
@@ -129,7 +137,7 @@ private val creatorApps = listOf("MAM", "Blockbench", "Termux", "Pixel studio", 
 private val bankApps = listOf("Т-банк", "Альфа Банк")
 private val antivirusApps = listOf("Диспетчер", "AppWatch", "Kaspersky")
 
-private val desktopRows = listOf(
+private val defaultDesktopRows = listOf(
     listOf(
         DesktopEntry("XBOX"), DesktopEntry("Заморозка"),
         DesktopEntry("Lotus Lantern"), DesktopEntry("Настройки")
@@ -160,14 +168,24 @@ private val dockFolders = listOf(
 class HomeScreenActivity : ComponentActivity() {
     private var launcherApps by mutableStateOf<List<LauncherApp>>(emptyList())
     private var wallpaperEnabled by mutableStateOf(true)
+    private var desktopLayout by mutableStateOf(defaultDesktopRows)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        desktopLayout = DesktopLayoutStore.load(getSharedPreferences("pipos_preferences", MODE_PRIVATE))
         WindowCompatCompat.configure(window)
         setContent {
             MaterialTheme {
                 PipOSLauncher(
                     apps = launcherApps,
+                    desktopRows = desktopLayout,
+                    onDesktopRowsChanged = { updated ->
+                        desktopLayout = updated
+                        DesktopLayoutStore.save(
+                            getSharedPreferences("pipos_preferences", MODE_PRIVATE),
+                            updated
+                        )
+                    },
                     showWallpaper = wallpaperEnabled,
                     onLaunch = { packageName ->
                         packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it) }
@@ -216,6 +234,8 @@ private object WindowCompatCompat {
 @Composable
 private fun PipOSLauncher(
     apps: List<LauncherApp>,
+    desktopRows: List<List<DesktopEntry>>,
+    onDesktopRowsChanged: (List<List<DesktopEntry>>) -> Unit,
     showWallpaper: Boolean,
     onLaunch: (String) -> Unit,
     onOpenSettings: () -> Unit
@@ -224,6 +244,37 @@ private fun PipOSLauncher(
     val page = pagerState.currentPage
     val appLookup = remember(apps) { AppLookup(apps) }
     var openedFolder by remember { mutableStateOf<DesktopEntry?>(null) }
+    var editMode by remember { mutableStateOf(false) }
+    var editingPosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var showCreateFolder by remember { mutableStateOf(false) }
+    var newFolderName by remember { mutableStateOf("") }
+    var showAppPicker by remember { mutableStateOf(false) }
+    var appPickerFolder by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    fun updateEntry(position: Pair<Int, Int>, transform: (DesktopEntry) -> DesktopEntry) {
+        val updated = desktopRows.mapIndexed { rowIndex, row ->
+            if (rowIndex != position.first) row
+            else row.mapIndexed { entryIndex, entry ->
+                if (entryIndex == position.second) transform(entry) else entry
+            }
+        }
+        onDesktopRowsChanged(updated)
+    }
+
+    fun appendEntry(entry: DesktopEntry) {
+        val updated = desktopRows.toMutableList()
+        if (updated.isEmpty() || updated.last().size >= 4) updated.add(listOf(entry))
+        else updated[updated.lastIndex] = updated.last() + entry
+        onDesktopRowsChanged(updated)
+    }
+
+    fun removeEntry(position: Pair<Int, Int>) {
+        val updated = desktopRows.mapIndexedNotNull { rowIndex, row ->
+            if (rowIndex != position.first) row
+            else row.filterIndexed { entryIndex, _ -> entryIndex != position.second }.takeIf { it.isNotEmpty() }
+        }
+        onDesktopRowsChanged(updated)
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = LauncherBackground) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -255,20 +306,45 @@ private fun PipOSLauncher(
                                     Text("PipOS", color = LauncherText, fontSize = 23.sp, fontWeight = FontWeight.Black)
                                     Text("YOUR SPACE", color = LauncherAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.5.sp)
                                 }
-                                TextButton(onClick = onOpenSettings) { Text("Настройки", color = LauncherAccent) }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (editMode) {
+                                        TextButton(onClick = { showCreateFolder = true }) {
+                                            Text("+ Папка", color = LauncherAccent, fontSize = 11.sp)
+                                        }
+                                        TextButton(onClick = {
+                                            appPickerFolder = null
+                                            showAppPicker = true
+                                        }) {
+                                            Text("+ App", color = LauncherAccent, fontSize = 11.sp)
+                                        }
+                                        TextButton(onClick = { editMode = false }) {
+                                            Text("Готово", color = LauncherText, fontSize = 11.sp)
+                                        }
+                                    } else {
+                                        TextButton(onClick = { editMode = true }) {
+                                            Text("Изменить", color = LauncherAccent, fontSize = 11.sp)
+                                        }
+                                        TextButton(onClick = onOpenSettings) {
+                                            Text("Настройки", color = LauncherAccent, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
                             }
-                            desktopRows.forEach { row ->
+                            desktopRows.forEachIndexed { rowIndex, row ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.Top
                                 ) {
-                                    row.forEach { entry ->
+                                    row.forEachIndexed { entryIndex, entry ->
                                         Box(modifier = Modifier.weight(1f)) {
                                             DesktopTile(
                                                 entry = entry,
                                                 isAi = entry.title == "Штаб ИИ",
                                                 app = appLookup.find(entry.title),
+                                                onEdit = if (editMode) {
+                                                    { editingPosition = rowIndex to entryIndex }
+                                                } else null,
                                                 onOpenFolder = { openedFolder = entry },
                                                 onLaunch = onLaunch,
                                                 onOpenSettings = onOpenSettings
@@ -323,6 +399,83 @@ private fun PipOSLauncher(
             }
         )
     }
+
+    editingPosition?.let { position ->
+        val entry = desktopRows.getOrNull(position.first)?.getOrNull(position.second)
+        if (entry != null) {
+            DesktopEntryEditorDialog(
+                entry = entry,
+                onDismiss = { editingPosition = null },
+                onSave = { newTitle ->
+                    updateEntry(position) { it.copy(title = newTitle.trim()) }
+                    editingPosition = null
+                },
+                onDelete = {
+                    removeEntry(position)
+                    editingPosition = null
+                },
+                onRemoveChild = { child ->
+                    updateEntry(position) { current ->
+                        current.copy(children = current.children.filterNot { it == child }, folder = true)
+                    }
+                },
+                onAddApp = {
+                    appPickerFolder = position
+                    editingPosition = null
+                    showAppPicker = true
+                }
+            )
+        }
+    }
+
+    if (showCreateFolder) {
+        AlertDialog(
+            onDismissRequest = { showCreateFolder = false },
+            containerColor = LauncherPanel,
+            title = { Text("Новая папка", color = LauncherText) },
+            text = {
+                OutlinedTextField(
+                    value = newFolderName,
+                    onValueChange = { newFolderName = it },
+                    singleLine = true,
+                    label = { Text("Название папки") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = newFolderName.trim()
+                    if (name.isNotEmpty()) appendEntry(DesktopEntry(name, folder = true))
+                    newFolderName = ""
+                    showCreateFolder = false
+                }) { Text("Создать", color = LauncherAccent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateFolder = false }) { Text("Отмена", color = LauncherMuted) }
+            }
+        )
+    }
+
+    if (showAppPicker) {
+        AppPickerDialog(
+            apps = apps,
+            onDismiss = { showAppPicker = false; appPickerFolder = null },
+            onSelect = { selectedApp ->
+                val target = appPickerFolder
+                if (target == null) {
+                    if (desktopRows.flatten().none { !it.isFolder && it.title == selectedApp.label }) {
+                        appendEntry(DesktopEntry(selectedApp.label))
+                    }
+                } else {
+                    updateEntry(target) { folder ->
+                        if (folder.children.contains(selectedApp.label)) folder
+                        else folder.copy(children = folder.children + selectedApp.label, folder = true)
+                    }
+                }
+                showAppPicker = false
+                appPickerFolder = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -364,6 +517,7 @@ private fun DesktopTile(
     entry: DesktopEntry,
     isAi: Boolean,
     app: LauncherApp?,
+    onEdit: (() -> Unit)?,
     onOpenFolder: () -> Unit,
     onLaunch: (String) -> Unit,
     onOpenSettings: () -> Unit
@@ -371,7 +525,9 @@ private fun DesktopTile(
     Column(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
             .clickable {
-                when {
+                if (onEdit != null) {
+                    onEdit()
+                } else when {
                     entry.isFolder -> onOpenFolder()
                     entry.title == "PipOS" -> onOpenSettings()
                     app != null -> onLaunch(app.packageName)
@@ -441,6 +597,142 @@ private fun FolderDialog(
             TextButton(onClick = onDismiss) { Text("Закрыть", color = LauncherAccent) }
         }
     )
+}
+
+@Composable
+private fun DesktopEntryEditorDialog(
+    entry: DesktopEntry,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onDelete: () -> Unit,
+    onRemoveChild: (String) -> Unit,
+    onAddApp: () -> Unit
+) {
+    var title by remember(entry.title) { mutableStateOf(entry.title) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = LauncherPanel,
+        title = { Text(if (entry.isFolder) "Редактировать папку" else "Редактировать приложение", color = LauncherText) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    singleLine = true,
+                    label = { Text("Название") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (entry.isFolder) {
+                    Text("Приложения в папке", color = LauncherAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    entry.children.forEach { child ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(child, color = LauncherText, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { onRemoveChild(child) }) {
+                                Text("Убрать", color = LauncherMuted, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    TextButton(onClick = onAddApp) { Text("+ Добавить приложение", color = LauncherAccent) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (title.trim().isNotEmpty()) onSave(title) }) {
+                Text("Сохранить", color = LauncherAccent)
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDelete) { Text("Удалить", color = Color(0xFFFF7A91)) }
+                TextButton(onClick = onDismiss) { Text("Отмена", color = LauncherMuted) }
+            }
+        }
+    )
+}
+
+@Composable
+private fun AppPickerDialog(
+    apps: List<LauncherApp>,
+    onDismiss: () -> Unit,
+    onSelect: (LauncherApp) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = LauncherPanel,
+        title = { Text("Добавить приложение", color = LauncherText) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 430.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(apps, key = { it.packageName }) { app ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .clickable { onSelect(app) }.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppIcon(app.label, false, Modifier.size(34.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(app.label, color = LauncherText, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Закрыть", color = LauncherAccent) }
+        }
+    )
+}
+
+private object DesktopLayoutStore {
+    fun load(preferences: SharedPreferences): List<List<DesktopEntry>> {
+        val raw = preferences.getString("desktop_layout_v1", null) ?: return defaultDesktopRows
+        return runCatching {
+            val root = JSONArray(raw)
+            buildList {
+                for (rowIndex in 0 until root.length()) {
+                    val rowJson = root.getJSONArray(rowIndex)
+                    val row = buildList {
+                        for (entryIndex in 0 until rowJson.length()) {
+                            val item = rowJson.getJSONObject(entryIndex)
+                            val childrenJson = item.optJSONArray("children") ?: JSONArray()
+                            val children = buildList {
+                                for (childIndex in 0 until childrenJson.length()) add(childrenJson.getString(childIndex))
+                            }
+                            add(DesktopEntry(
+                                title = item.optString("title"),
+                                children = children,
+                                folder = item.optBoolean("folder", children.isNotEmpty())
+                            ))
+                        }
+                    }
+                    if (row.isNotEmpty()) add(row)
+                }
+            }.ifEmpty { defaultDesktopRows }
+        }.getOrDefault(defaultDesktopRows)
+    }
+
+    fun save(preferences: SharedPreferences, rows: List<List<DesktopEntry>>) {
+        val root = JSONArray()
+        rows.forEach { row ->
+            val rowJson = JSONArray()
+            row.forEach { entry ->
+                val children = JSONArray()
+                entry.children.forEach { children.put(it) }
+                rowJson.put(
+                    JSONObject()
+                        .put("title", entry.title)
+                        .put("folder", entry.isFolder)
+                        .put("children", children)
+                )
+            }
+            root.put(rowJson)
+        }
+        preferences.edit().putString("desktop_layout_v1", root.toString()).apply()
+    }
 }
 
 @Composable
