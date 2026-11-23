@@ -202,7 +202,8 @@ private fun PipOSLauncher(
             Column(modifier = Modifier.fillMaxSize()) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.weight(1f).fillMaxWidth()
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    beyondViewportPageCount = 1
                 ) { pageIndex ->
                     if (pageIndex == 0) {
                         ClockOnlyScreen()
