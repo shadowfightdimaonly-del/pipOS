@@ -302,61 +302,10 @@ private fun PipOSApp() {
                     }
                     "Иконки" -> {
                         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text("Свои иконки приложений", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                Text("PipOS создаёт отдельный ярлык с выбранной картинкой. Исходную иконку приложения это не меняет; удалять старый ярлык можно вручную.", color = Muted, fontSize = 12.sp)
-                                BoxLikeDropdown(
-                                    selectedLabel = chosenApp?.label ?: "Выбрать приложение",
-                                    expanded = appMenuExpanded,
-                                    onExpand = { appMenuExpanded = true },
-                                    onDismiss = { appMenuExpanded = false },
-                                    apps = apps,
-                                    onSelect = { app ->
-                                        chosenApp = app
-                                        preferences.edit().putString("icon_package", app.packageName).apply()
-                                        iconStatus = "Выбрано: ${app.label}. Теперь загрузи изображение."
-                                        appMenuExpanded = false
-                                    }
-                                )
-                                OutlinedButton(onClick = { imagePicker.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("Выбрать изображение", color = Color.White)
-                                }
-                                chosenBitmap?.let { bitmap ->
-                                    Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Предпросмотр иконки", modifier = Modifier.align(Alignment.CenterHorizontally).height(88.dp))
-                                }
-                                Button(
-                                    onClick = {
-                                        val app = chosenApp
-                                        val bitmap = chosenBitmap
-                                        if (app == null || bitmap == null) {
-                                            iconStatus = "Сначала выбери приложение и изображение."
-                                        } else {
-                                            val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                            val shortcutManager = context.getSystemService(ShortcutManager::class.java)
-                                            if (launchIntent == null || shortcutManager == null || !shortcutManager.isRequestPinShortcutSupported) {
-                                                iconStatus = "Этот лаунчер не поддерживает создание закреплённых ярлыков."
-                                            } else {
-                                                runCatching {
-                                                    val iconBitmap = Bitmap.createScaledBitmap(bitmap, 192, 192, true)
-                                                    val shortcut = ShortcutInfo.Builder(context, "pipos_${app.packageName}")
-                                                        .setShortLabel(app.label.take(10))
-                                                        .setLongLabel(app.label.take(25))
-                                                        .setIntent(launchIntent)
-                                                        .setIcon(Icon.createWithBitmap(iconBitmap))
-                                                        .build()
-                                                    shortcutManager.requestPinShortcut(shortcut, null)
-                                                    iconStatus = "Запрос на добавление ярлыка отправлен. Подтверди его на рабочем столе."
-                                                }.onFailure {
-                                                    iconStatus = "Не удалось создать ярлык: ${it.message ?: "ошибка"}"
-                                                }
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = accent)
-                                ) { Text("Создать ярлык на рабочем столе", color = Color.White) }
-                                Text(iconStatus, color = Muted, fontSize = 11.sp)
-                                Text("Важно: Android и производитель лаунчера могут показать системное подтверждение. Функция работает через стандартные закреплённые ярлыки Android 8+.", color = Muted, fontSize = 11.sp)
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Автоматические иконки PipOS", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("PipOS сам создаёт значки для приложений и применяет их в своей сетке лаунчера. YouTube, TikTok, Minecraft и GitHub получают тематические символы, AI-приложения — короны. Для остальных используется автоматически созданная монограмма. Ничего загружать и подтверждать не нужно.", color = Muted, fontSize = 12.sp)
+                                Text("Новые приложения появляются в списке лаунчера после установки и обновления рабочего стола.", color = accent, fontSize = 12.sp)
                             }
                         }
                     }
