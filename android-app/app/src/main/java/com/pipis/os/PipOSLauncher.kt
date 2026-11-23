@@ -986,7 +986,7 @@ private fun drawPipIcon(
             canvas.drawCircle(54f, 45f, 25f, line); canvas.drawCircle(54f, 45f, 8f, fill)
             p.moveTo(31f, 58f); p.lineTo(54f, 91f); p.lineTo(77f, 58f); canvas.drawPath(p, line)
         }
-        "gear", "calculator", "photo", else -> {
+        else -> {
             canvas.drawRoundRect(28f, 28f, 80f, 80f, 13f, 13f, line)
             canvas.drawCircle(54f, 54f, 13f, fill)
         }
