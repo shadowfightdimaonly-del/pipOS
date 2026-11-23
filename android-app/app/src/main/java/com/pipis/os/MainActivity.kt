@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.provider.Settings
 import android.os.Bundle
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -257,7 +259,8 @@ private fun PipOSApp() {
                     Tool("Шрифты", "PipisCraft Sans и другие", Icons.Rounded.FontDownload),
                     Tool("Обои", "Фоны рабочего стола", Icons.Rounded.Wallpaper),
                     Tool("Коллекция", "Твои пакеты оформления", Icons.Rounded.Collections),
-                    Tool("Резервная копия", "Экспорт и импорт настроек", Icons.Rounded.Backup)
+                    Tool("Резервная копия", "Экспорт и импорт настроек", Icons.Rounded.Backup),
+                    Tool("Уведомления", "Чёрно-фиолетовые плашки PipOS", Icons.Rounded.Notifications)
                 )
                 items.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -267,6 +270,26 @@ private fun PipOSApp() {
                 }
 
                 when (selected) {
+                    "Уведомления" -> {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("PipOS Notifications", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Собственные уведомления PipOS: глубокий чёрный фон, фиолетовая рамка и свечение, название приложения, отправитель и текст сообщения. Появление — плавный выезд с коротким hologram-сканированием.", color = Muted, fontSize = 12.sp)
+                                Text("Для работы Android отдельно запросит два разрешения. Доступ к уведомлениям позволяет читать их содержимое, а разрешение поверх окон — показывать карточки поверх других приложений.", color = Muted, fontSize = 11.sp)
+                                Button(onClick = {
+                                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                                }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                                    Text("Разрешить доступ к уведомлениям", color = Color.White)
+                                }
+                                OutlinedButton(onClick = {
+                                    context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                                }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Разрешить отображение поверх окон", color = Color.White)
+                                }
+                                Text("После выдачи обоих разрешений PipOS сможет показывать собственные карточки для входящих уведомлений.", color = accent, fontSize = 11.sp)
+                            }
+                        }
+                    }
                     "Резервная копия" -> {
                         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
