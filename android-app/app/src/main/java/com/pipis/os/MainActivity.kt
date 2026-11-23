@@ -1,11 +1,20 @@
 package com.pipis.os
 
+import android.content.Intent
+import android.content.pm.ResolveInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,6 +38,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -43,15 +54,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.text.style.TextAlign
 
 private val Background = Color(0xFF09070F)
 private val Panel = Color(0xFF171222)
@@ -64,6 +76,11 @@ private val themePresets = listOf(
     "Crimson" to "#FF5577",
     "Amber" to "#FFB74D",
     "Ice" to "#75E5E8"
+)
+
+private data class LaunchableApp(
+    val label: String,
+    val packageName: String
 )
 
 class MainActivity : ComponentActivity() {
@@ -89,6 +106,26 @@ private fun PipOSApp() {
         )
     }
     var status by remember { mutableStateOf("Резервная копия хранит настройки PipOS в ZIP-архиве.") }
+    var iconStatus by remember { mutableStateOf("Выбери приложение и изображение для новой иконки.") }
+    var appMenuExpanded by remember { mutableStateOf(false) }
+    val apps = remember(context) {
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        context.packageManager.queryIntentActivities(launcherIntent, 0)
+            .mapNotNull { info ->
+                val packageName = info.activityInfo?.packageName ?: return@mapNotNull null
+                if (packageName == context.packageName) return@mapNotNull null
+                LaunchableApp(
+                    label = info.loadLabel(context.packageManager).toString(),
+                    packageName = packageName
+                )
+            }
+            .distinctBy { it.packageName }
+            .sortedBy { it.label.lowercase() }
+    }
+    var chosenApp by remember { mutableStateOf<LaunchableApp?>(null) }
+    var chosenImageUri by remember { mutableStateOf<Uri?>(null) }
+    var chosenBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val scope = rememberCoroutineScope()
     val accent = remember(settings.accentColor) {
         runCatching { Color(android.graphics.Color.parseColor(settings.accentColor)) }
@@ -102,6 +139,51 @@ private fun PipOSApp() {
             .apply()
     }
 
+    LaunchedEffect(context) {
+        val savedPackage = preferences.getString("icon_package", null)
+        val savedUri = preferences.getString("icon_uri", null)
+        if (savedPackage != null && savedUri != null) {
+            chosenApp = apps.firstOrNull { it.packageName == savedPackage }
+            chosenImageUri = runCatching { Uri.parse(savedUri) }.getOrNull()
+            chosenImageUri?.let { uri ->
+                val bitmap = runCatching {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                    }
+                }.getOrNull()
+                chosenBitmap = bitmap
+            }
+        }
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val bitmap = runCatching {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                    }
+                }.getOrNull()
+                if (bitmap == null) {
+                    iconStatus = "Не удалось открыть изображение. Попробуй PNG или JPG."
+                } else {
+                    runCatching {
+                        context.contentResolver.takePersistableUriPermission(
+                            uri,
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    }
+                    chosenImageUri = uri
+                    chosenBitmap = bitmap
+                    preferences.edit().putString("icon_uri", uri.toString()).apply()
+                    iconStatus = "Изображение загружено. Теперь можно создать ярлык."
+                }
+            }
+        }
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
@@ -110,9 +192,7 @@ private fun PipOSApp() {
         } else {
             scope.launch {
                 val result = runCatching {
-                    kotlinx.coroutines.withContext(Dispatchers.IO) {
-                        PipOSBackup.export(context, uri, settings)
-                    }
+                    withContext(Dispatchers.IO) { PipOSBackup.export(context, uri, settings) }
                 }
                 status = result.fold(
                     onSuccess = { "Архив PipOS успешно сохранён." },
@@ -130,9 +210,7 @@ private fun PipOSApp() {
         } else {
             scope.launch {
                 val result = runCatching {
-                    kotlinx.coroutines.withContext(Dispatchers.IO) {
-                        PipOSBackup.import(context, uri)
-                    }
+                    withContext(Dispatchers.IO) { PipOSBackup.import(context, uri) }
                 }
                 result.onSuccess {
                     settings = it
@@ -147,20 +225,13 @@ private fun PipOSApp() {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Background) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 Text("PipOS", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black)
                 Text("Твоя система. Твои правила.", color = Muted, fontSize = 14.sp)
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Panel),
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp)) {
                         Text("Центр кастомизации", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
@@ -171,51 +242,37 @@ private fun PipOSApp() {
                 Text("ИНСТРУМЕНТЫ", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 val items = listOf(
                     Tool("Темы", "Цвета и оформление", Icons.Rounded.Brush),
-                    Tool("Иконки", "Набор значков приложений", Icons.Rounded.Apps),
+                    Tool("Иконки", "Свои значки приложений", Icons.Rounded.Apps),
                     Tool("Шрифты", "PipisCraft Sans и другие", Icons.Rounded.FontDownload),
                     Tool("Обои", "Фоны рабочего стола", Icons.Rounded.Wallpaper),
                     Tool("Коллекция", "Твои пакеты оформления", Icons.Rounded.Collections),
                     Tool("Резервная копия", "Экспорт и импорт настроек", Icons.Rounded.Backup)
                 )
-
                 items.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        pair.forEach { tool ->
-                            ToolCard(tool, accent, Modifier.weight(1f)) { selected = tool.title }
-                        }
+                        pair.forEach { tool -> ToolCard(tool, accent, Modifier.weight(1f)) { selected = tool.title } }
                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
 
                 when (selected) {
                     "Резервная копия" -> {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Panel),
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("Перенос PipOS", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                                 Text("Создай ZIP-файл, чтобы перенести текущие настройки на другое устройство.", color = Muted, fontSize = 12.sp)
-                                Button(
-                                    onClick = { exportLauncher.launch("PipOS-backup.zip") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = accent)
-                                ) { Text("Экспортировать ZIP", color = Color.White) }
-                                OutlinedButton(
-                                    onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text("Импортировать ZIP", color = Color.White) }
+                                Button(onClick = { exportLauncher.launch("PipOS-backup.zip") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                                    Text("Экспортировать ZIP", color = Color.White)
+                                }
+                                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Импортировать ZIP", color = Color.White)
+                                }
                                 Text(status, color = Muted, fontSize = 11.sp)
                             }
                         }
                     }
                     "Темы" -> {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Panel),
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text("Цветовая тема", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 Text("Выбери акцентный цвет PipOS. Он сразу применяется к интерфейсу приложения и сохраняется на устройстве.", color = Muted, fontSize = 12.sp)
@@ -223,18 +280,10 @@ private fun PipOSApp() {
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         pair.forEach { preset ->
                                             val presetColor = Color(android.graphics.Color.parseColor(preset.second))
-                                            Card(
-                                                modifier = Modifier.weight(1f).clickable {
-                                                    settings = settings.copy(themeName = preset.first, accentColor = preset.second)
-                                                },
-                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF211A30)),
-                                                shape = RoundedCornerShape(14.dp)
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
+                                            Card(modifier = Modifier.weight(1f).clickable {
+                                                settings = settings.copy(themeName = preset.first, accentColor = preset.second)
+                                            }, colors = CardDefaults.cardColors(containerColor = Color(0xFF211A30)), shape = RoundedCornerShape(14.dp)) {
+                                                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(Icons.Rounded.Brush, contentDescription = null, tint = presetColor)
                                                     Column {
                                                         Text(preset.first, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -250,33 +299,76 @@ private fun PipOSApp() {
                             }
                         }
                     }
-                    "Главная" -> Text(
-                        "PipOS Android • версия 0.3.0",
-                        color = Muted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                    else -> Card(
-                        colors = CardDefaults.cardColors(containerColor = Panel),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    "Иконки" -> {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("Свои иконки приложений", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("PipOS создаёт отдельный ярлык с выбранной картинкой. Исходную иконку приложения это не меняет; удалять старый ярлык можно вручную.", color = Muted, fontSize = 12.sp)
+                                BoxLikeDropdown(
+                                    selectedLabel = chosenApp?.label ?: "Выбрать приложение",
+                                    expanded = appMenuExpanded,
+                                    onExpand = { appMenuExpanded = true },
+                                    onDismiss = { appMenuExpanded = false },
+                                    apps = apps,
+                                    onSelect = { app ->
+                                        chosenApp = app
+                                        preferences.edit().putString("icon_package", app.packageName).apply()
+                                        iconStatus = "Выбрано: ${app.label}. Теперь загрузи изображение."
+                                        appMenuExpanded = false
+                                    }
+                                )
+                                OutlinedButton(onClick = { imagePicker.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Выбрать изображение", color = Color.White)
+                                }
+                                chosenBitmap?.let { bitmap ->
+                                    Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Предпросмотр иконки", modifier = Modifier.align(Alignment.CenterHorizontally).height(88.dp))
+                                }
+                                Button(
+                                    onClick = {
+                                        val app = chosenApp
+                                        val bitmap = chosenBitmap
+                                        if (app == null || bitmap == null) {
+                                            iconStatus = "Сначала выбери приложение и изображение."
+                                        } else {
+                                            val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                                            val shortcutManager = context.getSystemService(ShortcutManager::class.java)
+                                            if (launchIntent == null || shortcutManager == null || !shortcutManager.isRequestPinShortcutSupported) {
+                                                iconStatus = "Этот лаунчер не поддерживает создание закреплённых ярлыков."
+                                            } else {
+                                                runCatching {
+                                                    val iconBitmap = Bitmap.createScaledBitmap(bitmap, 192, 192, true)
+                                                    val shortcut = ShortcutInfo.Builder(context, "pipos_${app.packageName}")
+                                                        .setShortLabel(app.label.take(10))
+                                                        .setLongLabel(app.label)
+                                                        .setIntent(launchIntent)
+                                                        .setIcon(Icon.createWithBitmap(iconBitmap))
+                                                        .build()
+                                                    shortcutManager.requestPinShortcut(shortcut, null)
+                                                    iconStatus = "Запрос на добавление ярлыка отправлен. Подтверди его на рабочем столе."
+                                                }.onFailure {
+                                                    iconStatus = "Не удалось создать ярлык: ${it.message ?: "ошибка"}"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                                ) { Text("Создать ярлык на рабочем столе", color = Color.White) }
+                                Text(iconStatus, color = Muted, fontSize = 11.sp)
+                                Text("Важно: Android и производитель лаунчера могут показать системное подтверждение. Функция работает через стандартные закреплённые ярлыки Android 8+.", color = Muted, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    "Главная" -> Text("PipOS Android • версия 0.3.1", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    else -> Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(selected, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            Text(
-                                when (selected) {
-                                    "Иконки" -> "Раздел подготовлен. Импорт и применение наборов значков добавим следующим этапом."
-                                    "Шрифты" -> "Раздел подготовлен. Здесь появится импорт шрифтов и поддерживаемых пакетов."
-                                    "Обои" -> "Раздел подготовлен. Здесь появится выбор изображения и установка обоев."
-                                    else -> "Здесь будут собираться и храниться твои наборы оформления."
-                                },
-                                color = Muted,
-                                fontSize = 12.sp
-                            )
-                            OutlinedButton(onClick = { selected = "Главная" }) {
-                                Text("На главную", color = Color.White)
-                            }
+                            Text(when (selected) {
+                                "Шрифты" -> "Здесь появится импорт шрифтов и предпросмотр внутри PipOS."
+                                "Обои" -> "Здесь появится выбор изображения и установка обоев."
+                                else -> "Здесь будут собираться и храниться твои наборы оформления."
+                            }, color = Muted, fontSize = 12.sp)
+                            OutlinedButton(onClick = { selected = "Главная" }) { Text("На главную", color = Color.White) }
                         }
                     }
                 }
@@ -285,19 +377,38 @@ private fun PipOSApp() {
     }
 }
 
+@Composable
+private fun BoxLikeDropdown(
+    selectedLabel: String,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onDismiss: () -> Unit,
+    apps: List<LaunchableApp>,
+    onSelect: (LaunchableApp) -> Unit
+) {
+    Column {
+        OutlinedButton(onClick = onExpand, modifier = Modifier.fillMaxWidth()) {
+            Text(selectedLabel, color = Color.White)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+            apps.take(80).forEach { app ->
+                DropdownMenuItem(text = { Text(app.label) }, onClick = { onSelect(app) })
+            }
+        }
+        if (apps.isEmpty()) {
+            Text("Не удалось получить список приложений на этом устройстве.", color = Muted, fontSize = 11.sp)
+        } else if (apps.size > 80) {
+            Text("Показаны первые 80 приложений.", color = Muted, fontSize = 10.sp)
+        }
+    }
+}
+
 private data class Tool(val title: String, val subtitle: String, val icon: ImageVector)
 
 @Composable
 private fun ToolCard(tool: Tool, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+    Card(modifier = modifier.clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(tool.icon, contentDescription = null, tint = accent)
             Text(tool.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Text(tool.subtitle, color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
