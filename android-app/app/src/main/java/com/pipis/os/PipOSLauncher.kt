@@ -202,8 +202,7 @@ private fun PipOSLauncher(
             Column(modifier = Modifier.fillMaxSize()) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    beyondViewportPageCount = 1
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 ) { pageIndex ->
                     if (pageIndex == 0) {
                         ClockOnlyScreen()
@@ -463,24 +462,32 @@ private fun FolderDialog(
 
 @Composable
 private fun FolderIcon(label: String, modifier: Modifier = Modifier) {
+    val paint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(156, 77, 255)
+            style = Paint.Style.FILL
+        }
+    }
+    val path = remember {
+        android.graphics.Path().apply {
+            moveTo(13f, 31f)
+            lineTo(46f, 31f)
+            lineTo(57f, 43f)
+            lineTo(95f, 43f)
+            lineTo(95f, 86f)
+            quadTo(95f, 95f, 86f, 95f)
+            lineTo(18f, 95f)
+            quadTo(11f, 95f, 11f, 86f)
+            close()
+        }
+    }
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(156, 77, 255)
-                style = Paint.Style.FILL
-            }
-            val path = android.graphics.Path().apply {
-                moveTo(size.width * .12f, size.height * .29f)
-                lineTo(size.width * .43f, size.height * .29f)
-                lineTo(size.width * .53f, size.height * .40f)
-                lineTo(size.width * .88f, size.height * .40f)
-                lineTo(size.width * .88f, size.height * .80f)
-                quadTo(size.width * .88f, size.height * .88f, size.width * .79f, size.height * .88f)
-                lineTo(size.width * .17f, size.height * .88f)
-                quadTo(size.width * .10f, size.height * .88f, size.width * .10f, size.height * .80f)
-                close()
-            }
-            drawContext.canvas.nativeCanvas.drawPath(path, p)
+            val canvas = drawContext.canvas.nativeCanvas
+            val save = canvas.save()
+            canvas.scale(size.width / 108f, size.height / 108f)
+            canvas.drawPath(path, paint)
+            canvas.restoreToCount(save)
         }
         Text(label.take(1).uppercase(Locale.getDefault()), color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.Black)
     }
@@ -514,34 +521,40 @@ private fun AppIcon(label: String, isAi: Boolean, modifier: Modifier = Modifier)
             }
         }
     }
-    Canvas(modifier = modifier) {
-        val canvas = drawContext.canvas.nativeCanvas
-        val save = canvas.save()
-        canvas.scale(size.width / 108f, size.height / 108f)
-        canvas.drawRoundRect(2f, 2f, 106f, 106f, 25f, 25f, bg)
-        val path = android.graphics.Path().apply {
+    val iconPath = remember {
+        android.graphics.Path().apply {
             moveTo(30f, 35f); lineTo(48f, 35f); lineTo(54f, 42f); lineTo(78f, 42f)
             cubicTo(79.7f, 42f, 81f, 43.3f, 81f, 45f); lineTo(81f, 73f)
             cubicTo(81f, 74.7f, 79.7f, 76f, 78f, 76f); lineTo(30f, 76f)
             cubicTo(28.3f, 76f, 27f, 74.7f, 27f, 73f); lineTo(27f, 38f)
             cubicTo(27f, 36.3f, 28.3f, 35f, 30f, 35f); close()
         }
-        canvas.drawPath(path, purple)
+    }
+    val badgePaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(224, 190, 255)
+            style = Paint.Style.FILL
+        }
+    }
+    val starPaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(75, 28, 120)
+            textAlign = Paint.Align.CENTER
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+    }
+    Canvas(modifier = modifier) {
+        val canvas = drawContext.canvas.nativeCanvas
+        val save = canvas.save()
+        canvas.scale(size.width / 108f, size.height / 108f)
+        canvas.drawRoundRect(2f, 2f, 106f, 106f, 25f, 25f, bg)
+        canvas.drawPath(iconPath, purple)
         val baseline = 59f - (glyph.ascent() + glyph.descent()) / 2f
         canvas.drawText(symbol, 54f, baseline, glyph)
         if (isAi) {
-            val badge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(224, 190, 255)
-                style = Paint.Style.FILL
-            }
-            canvas.drawCircle(87f, 20f, 13f, badge)
-            val star = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(75, 28, 120)
-                textAlign = Paint.Align.CENTER
-                textSize = 19f
-                typeface = Typeface.DEFAULT_BOLD
-            }
-            canvas.drawText("★", 87f, 27f, star)
+            canvas.drawCircle(87f, 20f, 13f, badgePaint)
+            canvas.drawText("★", 87f, 27f, starPaint)
         }
         canvas.restoreToCount(save)
     }
