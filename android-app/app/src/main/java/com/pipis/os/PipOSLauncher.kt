@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Paint
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -86,8 +85,7 @@ private val LauncherMuted = Color(0xFFB8AEC9)
 
 private data class LauncherApp(
     val label: String,
-    val packageName: String,
-    val icon: Drawable? = null
+    val packageName: String
 )
 private data class DesktopEntry(
     val title: String,
@@ -223,7 +221,7 @@ class HomeScreenActivity : ComponentActivity() {
         return results.mapNotNull { info ->
             val activityInfo = info.activityInfo ?: return@mapNotNull null
             if (activityInfo.packageName == packageName) return@mapNotNull null
-            LauncherApp(info.loadLabel(packageManager).toString(), activityInfo.packageName, info.loadIcon(packageManager))
+            LauncherApp(info.loadLabel(packageManager).toString(), activityInfo.packageName)
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 }
@@ -790,69 +788,210 @@ private fun AppIcon(
     app: LauncherApp? = null,
     modifier: Modifier = Modifier
 ) {
-    val symbol = remember(label) { iconSymbol(label) }
-    val drawable = remember(app?.packageName) {
-        app?.icon?.constantState?.newDrawable()?.mutate() ?: app?.icon?.mutate()
-    }
-    val backgroundPaint = remember {
+    val kind = remember(label) { iconKind(label) }
+    val bgPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(35, 23, 49)
+            color = android.graphics.Color.rgb(19, 13, 30)
             style = Paint.Style.FILL
         }
     }
-    val fallbackPaint = remember {
+    val glowPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
-        }
-    }
-    val badgePaint = remember {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(224, 190, 255)
+            color = android.graphics.Color.rgb(105, 57, 157)
             style = Paint.Style.FILL
         }
     }
-    val starPaint = remember {
+    val glyphPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(75, 28, 120)
-            textAlign = Paint.Align.CENTER
-            textSize = 19f
-            typeface = Typeface.DEFAULT_BOLD
+            color = android.graphics.Color.rgb(220, 190, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = 7f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
         }
     }
-
+    val fillPaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(184, 132, 255)
+            style = Paint.Style.FILL
+        }
+    }
     Canvas(modifier = modifier) {
         val canvas = drawContext.canvas.nativeCanvas
         val save = canvas.save()
         canvas.scale(size.width / 108f, size.height / 108f)
-        canvas.drawRoundRect(3f, 3f, 105f, 105f, 25f, 25f, backgroundPaint)
-
-        if (drawable != null) {
-            val iconSave = canvas.save()
-            canvas.clipRect(8f, 8f, 100f, 100f)
-            drawable.setBounds(8, 8, 100, 100)
-            drawable.draw(canvas)
-            canvas.restoreToCount(iconSave)
-        } else {
-            fallbackPaint.textSize = when {
-                symbol.length >= 4 -> 17f
-                symbol.length == 3 -> 22f
-                symbol.length == 2 -> 29f
-                else -> 39f
-            }
-            val baseline = 54f - (fallbackPaint.ascent() + fallbackPaint.descent()) / 2f
-            canvas.drawText(symbol, 54f, baseline, fallbackPaint)
-        }
-
+        canvas.drawRoundRect(3f, 3f, 105f, 105f, 27f, 27f, bgPaint)
+        canvas.drawCircle(54f, 54f, 35f, glowPaint)
+        drawPipIcon(canvas, kind, glyphPaint, fillPaint)
         if (isAi) {
-            canvas.drawCircle(88f, 20f, 13f, badgePaint)
-            canvas.drawText("★", 88f, 27f, starPaint)
+            canvas.drawCircle(88f, 20f, 9f, fillPaint)
         }
         canvas.restoreToCount(save)
     }
 }
 
+private fun iconKind(label: String): String {
+    val v = normalize(label)
+    return when {
+        "telegram" in v -> "telegram"
+        "whatsapp" in v || "сообщения" in v -> "chat"
+        "max" == v -> "max"
+        "youtube" in v || v == "ytmusic" -> "video"
+        "tiktok" in v -> "music"
+        "capcut" in v -> "cut"
+        "minecraft" in v -> "block"
+        "brawl" in v -> "star"
+        "roblox" in v -> "diamond"
+        "chrome" in v || "браузер" in v -> "orbit"
+        "gmail" in v || "почта" in v -> "mail"
+        "googleplay" in v || "playstore" in v -> "play"
+        "chatgpt" in v -> "knot"
+        "claude" in v -> "sun"
+        "gemini" in v -> "spark"
+        "grok" in v -> "x"
+        "deepseek" in v -> "wave"
+        "github" in v -> "cat"
+        "pipis" in v -> "pencil"
+        "termux" in v -> "terminal"
+        "камера" in v -> "camera"
+        "календар" in v -> "calendar"
+        "настрой" in v -> "gear"
+        "фото" in v || "галере" in v -> "photo"
+        "калькулятор" in v -> "calculator"
+        "телефон" in v || "phone" in v -> "phone"
+        "карты" in v || "maps" in v -> "pin"
+        else -> "app"
+    }
+}
+
+private fun drawPipIcon(
+    canvas: android.graphics.Canvas,
+    kind: String,
+    line: Paint,
+    fill: Paint
+) {
+    val p = android.graphics.Path()
+    when (kind) {
+        "telegram" -> {
+            p.moveTo(19f, 51f); p.lineTo(88f, 24f); p.lineTo(72f, 87f)
+            p.lineTo(52f, 68f); p.lineTo(41f, 78f); p.lineTo(43f, 58f); p.close()
+            canvas.drawPath(p, fill)
+            canvas.drawLine(43f, 58f, 88f, 24f, line)
+        }
+        "chat", "max" -> {
+            canvas.drawRoundRect(20f, 23f, 88f, 76f, 19f, 19f, line)
+            p.moveTo(37f, 74f); p.lineTo(31f, 88f); p.lineTo(53f, 75f)
+            canvas.drawPath(p, line)
+            canvas.drawCircle(40f, 50f, 4f, fill); canvas.drawCircle(54f, 50f, 4f, fill); canvas.drawCircle(68f, 50f, 4f, fill)
+        }
+        "video" -> {
+            canvas.drawRoundRect(17f, 29f, 91f, 79f, 15f, 15f, line)
+            p.moveTo(46f, 39f); p.lineTo(46f, 69f); p.lineTo(70f, 54f); p.close()
+            canvas.drawPath(p, fill)
+        }
+        "music" -> {
+            p.moveTo(60f, 25f); p.lineTo(82f, 20f); p.lineTo(82f, 68f)
+            canvas.drawPath(p, line); canvas.drawLine(60f, 25f, 60f, 70f, line)
+            canvas.drawOval(34f, 64f, 61f, 84f, fill); canvas.drawOval(57f, 60f, 84f, 80f, fill)
+        }
+        "cut", "x" -> {
+            canvas.drawLine(27f, 27f, 81f, 81f, line); canvas.drawLine(81f, 27f, 27f, 81f, line)
+            canvas.drawCircle(26f, 25f, 9f, fill); canvas.drawCircle(82f, 25f, 9f, fill)
+        }
+        "block" -> {
+            p.moveTo(54f, 19f); p.lineTo(88f, 37f); p.lineTo(54f, 56f); p.lineTo(20f, 37f); p.close()
+            canvas.drawPath(p, fill)
+            p.reset(); p.moveTo(20f, 37f); p.lineTo(20f, 75f); p.lineTo(54f, 94f); p.lineTo(54f, 56f); p.close(); canvas.drawPath(p, line)
+            p.reset(); p.moveTo(88f, 37f); p.lineTo(88f, 75f); p.lineTo(54f, 94f); p.lineTo(54f, 56f); p.close(); canvas.drawPath(p, line)
+        }
+        "star" -> {
+            for (i in 0 until 10) {
+                val a = Math.PI * i / 5.0 - Math.PI / 2
+                val r = if (i % 2 == 0) 38.0 else 19.0
+                val x = (54 + kotlin.math.cos(a) * r).toFloat()
+                val y = (54 + kotlin.math.sin(a) * r).toFloat()
+                if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+            }
+            p.close(); canvas.drawPath(p, fill)
+        }
+        "diamond" -> {
+            p.moveTo(54f, 18f); p.lineTo(88f, 54f); p.lineTo(54f, 90f); p.lineTo(20f, 54f); p.close()
+            canvas.drawPath(p, line); canvas.drawLine(54f, 18f, 54f, 90f, line)
+        }
+        "orbit" -> {
+            canvas.drawCircle(54f, 54f, 31f, line); canvas.drawCircle(54f, 54f, 14f, fill)
+            canvas.drawArc(17f, 28f, 91f, 80f, -35f, 220f, false, fill)
+        }
+        "mail" -> {
+            canvas.drawRoundRect(18f, 29f, 90f, 79f, 8f, 8f, line)
+            canvas.drawLine(20f, 32f, 54f, 58f, line); canvas.drawLine(88f, 32f, 54f, 58f, line)
+        }
+        "play" -> {
+            p.moveTo(35f, 20f); p.lineTo(85f, 54f); p.lineTo(35f, 88f); p.close()
+            canvas.drawPath(p, fill); canvas.drawLine(35f, 20f, 54f, 54f, line); canvas.drawLine(35f, 88f, 54f, 54f, line)
+        }
+        "knot" -> {
+            canvas.drawOval(25f, 29f, 72f, 76f, line); canvas.drawOval(38f, 29f, 85f, 76f, line)
+            canvas.drawLine(35f, 42f, 73f, 67f, line); canvas.drawLine(73f, 42f, 35f, 67f, line)
+        }
+        "sun", "spark" -> {
+            canvas.drawCircle(54f, 54f, 14f, fill)
+            for (i in 0 until 8) {
+                val a = Math.PI * i / 4
+                val x1 = (54 + kotlin.math.cos(a) * 25).toFloat()
+                val y1 = (54 + kotlin.math.sin(a) * 25).toFloat()
+                val x2 = (54 + kotlin.math.cos(a) * 40).toFloat()
+                val y2 = (54 + kotlin.math.sin(a) * 40).toFloat()
+                canvas.drawLine(x1, y1, x2, y2, line)
+            }
+        }
+        "wave" -> {
+            for (j in 0..2) {
+                val y = 39f + j * 15f
+                p.reset(); p.moveTo(20f, y)
+                p.cubicTo(37f, y - 20f, 67f, y + 20f, 88f, y)
+                canvas.drawPath(p, line)
+            }
+        }
+        "cat" -> {
+            p.moveTo(26f, 42f); p.lineTo(23f, 22f); p.lineTo(43f, 33f)
+            p.quadTo(54f, 28f, 65f, 33f); p.lineTo(85f, 22f); p.lineTo(82f, 42f)
+            p.quadTo(94f, 72f, 70f, 82f); p.lineTo(38f, 82f); p.quadTo(14f, 72f, 26f, 42f); p.close()
+            canvas.drawPath(p, line); canvas.drawCircle(42f, 57f, 3f, fill); canvas.drawCircle(66f, 57f, 3f, fill)
+        }
+        "pencil" -> {
+            canvas.drawLine(31f, 77f, 75f, 33f, line); canvas.drawLine(24f, 84f, 31f, 77f, line)
+            canvas.drawLine(75f, 33f, 84f, 42f, line); canvas.drawLine(31f, 77f, 40f, 86f, line)
+            canvas.drawLine(40f, 86f, 84f, 42f, line)
+        }
+        "terminal" -> {
+            canvas.drawRoundRect(17f, 25f, 91f, 82f, 9f, 9f, line)
+            canvas.drawLine(30f, 42f, 43f, 54f, line); canvas.drawLine(43f, 54f, 30f, 66f, line)
+            canvas.drawLine(52f, 67f, 76f, 67f, line)
+        }
+        "camera" -> {
+            canvas.drawRoundRect(19f, 33f, 89f, 79f, 10f, 10f, line)
+            canvas.drawCircle(54f, 56f, 16f, line); canvas.drawCircle(54f, 56f, 7f, fill)
+        }
+        "calendar" -> {
+            canvas.drawRoundRect(22f, 25f, 86f, 84f, 8f, 8f, line)
+            canvas.drawLine(22f, 43f, 86f, 43f, line); canvas.drawLine(39f, 18f, 39f, 33f, line); canvas.drawLine(69f, 18f, 69f, 33f, line)
+            canvas.drawCircle(43f, 59f, 4f, fill); canvas.drawCircle(65f, 59f, 4f, fill)
+        }
+        "phone" -> {
+            canvas.drawArc(27f, 25f, 81f, 83f, 120f, 125f, false, line)
+            canvas.drawLine(33f, 34f, 43f, 45f, line); canvas.drawLine(65f, 64f, 77f, 75f, line)
+        }
+        "pin" -> {
+            canvas.drawCircle(54f, 45f, 25f, line); canvas.drawCircle(54f, 45f, 8f, fill)
+            p.moveTo(31f, 58f); p.lineTo(54f, 91f); p.lineTo(77f, 58f); canvas.drawPath(p, line)
+        }
+        "gear", "calculator", "photo", else -> {
+            canvas.drawRoundRect(28f, 28f, 80f, 80f, 13f, 13f, line)
+            canvas.drawCircle(54f, 54f, 13f, fill)
+        }
+    }
+}
 
 private fun normalize(value: String): String =
     value.lowercase(Locale.ROOT).replace("ё", "е").replace(Regex("[^\\p{L}\\p{N}]"), "")
