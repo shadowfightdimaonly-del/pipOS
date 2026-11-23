@@ -1003,8 +1003,21 @@ private fun drawPipIcon(
             p.moveTo(31f, 58f); p.lineTo(54f, 91f); p.lineTo(77f, 58f); canvas.drawPath(p, line)
         }
         else -> {
-            canvas.drawRoundRect(28f, 28f, 80f, 80f, 13f, 13f, line)
-            canvas.drawCircle(54f, 54f, 13f, fill)
+            when (kind.removePrefix("custom_").toIntOrNull()) {
+                0 -> { canvas.drawCircle(54f, 54f, 31f, line); canvas.drawCircle(54f, 54f, 15f, fill) }
+                1 -> { p.moveTo(54f, 18f); p.lineTo(88f, 85f); p.lineTo(20f, 85f); p.close(); canvas.drawPath(p, line); canvas.drawCircle(54f, 60f, 8f, fill) }
+                2 -> { canvas.drawRoundRect(19f, 19f, 89f, 89f, 18f, 18f, line); canvas.drawLine(19f, 54f, 89f, 54f, line); canvas.drawLine(54f, 19f, 54f, 89f, line) }
+                3 -> { for (n in 0 until 6) { val a = Math.PI * n / 3; canvas.drawCircle((54 + kotlin.math.cos(a) * 25).toFloat(), (54 + kotlin.math.sin(a) * 25).toFloat(), 9f, fill) }; canvas.drawCircle(54f, 54f, 11f, line) }
+                4 -> { p.moveTo(54f, 18f); p.lineTo(88f, 54f); p.lineTo(54f, 90f); p.lineTo(20f, 54f); p.close(); canvas.drawPath(p, line); canvas.drawCircle(54f, 54f, 10f, fill) }
+                5 -> { canvas.drawArc(19f, 19f, 89f, 89f, 35f, 290f, false, line); canvas.drawLine(54f, 54f, 82f, 27f, line); canvas.drawCircle(54f, 54f, 8f, fill) }
+                6 -> { canvas.drawRoundRect(20f, 29f, 88f, 79f, 10f, 10f, line); canvas.drawCircle(38f, 54f, 6f, fill); canvas.drawCircle(54f, 54f, 6f, fill); canvas.drawCircle(70f, 54f, 6f, fill) }
+                7 -> { p.moveTo(20f, 25f); p.lineTo(88f, 25f); p.lineTo(54f, 86f); p.close(); canvas.drawPath(p, line); canvas.drawLine(37f, 55f, 71f, 55f, fill) }
+                8 -> { canvas.drawLine(25f, 25f, 83f, 83f, line); canvas.drawLine(83f, 25f, 25f, 83f, line); canvas.drawCircle(54f, 54f, 13f, fill) }
+                9 -> { canvas.drawArc(19f, 24f, 89f, 84f, 190f, 160f, false, line); canvas.drawArc(29f, 34f, 79f, 74f, 190f, 160f, false, fill) }
+                10 -> { canvas.drawRect(24f, 24f, 84f, 84f, line); canvas.drawCircle(54f, 54f, 19f, fill) }
+                11 -> { p.moveTo(54f, 18f); p.lineTo(66f, 42f); p.lineTo(91f, 54f); p.lineTo(66f, 66f); p.lineTo(54f, 90f); p.lineTo(42f, 66f); p.lineTo(17f, 54f); p.lineTo(42f, 42f); p.close(); canvas.drawPath(p, fill) }
+                else -> { canvas.drawRoundRect(28f, 28f, 80f, 80f, 13f, 13f, line); canvas.drawCircle(54f, 54f, 13f, fill) }
+            }
         }
     }
 }
