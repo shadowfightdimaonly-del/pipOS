@@ -96,16 +96,13 @@ class HomeScreenActivity : ComponentActivity() {
     }
 
     private fun makePipIcon(appPackage: String, label: String): Bitmap {
-        val size = 192
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val isAi = isAiApp(label, appPackage)
-        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isAi) android.graphics.Color.rgb(48, 25, 78)
-            else android.graphics.Color.rgb(25, 13, 43)
+        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (isAi) android.graphics.Color.rgb(48, 25, 78) else android.graphics.Color.rgb(25, 13, 43)
         }
-        canvas.drawRoundRect(RectF(4f, 4f, 188f, 188f), 46f, 46f, bg)
-
+        canvas.drawRoundRect(RectF(4f, 4f, 188f, 188f), 46f, 46f, background)
         try {
             val drawable: Drawable = packageManager.getApplicationIcon(appPackage).mutate()
             drawable.setTint(android.graphics.Color.rgb(211, 188, 255))
@@ -120,7 +117,6 @@ class HomeScreenActivity : ComponentActivity() {
             }
             canvas.drawText(label.firstOrNull()?.uppercase() ?: "•", 96f, 132f, paint)
         }
-
         if (isAi) {
             val badge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(126, 78, 190) }
             canvas.drawCircle(151f, 42f, 28f, badge)
@@ -143,20 +139,12 @@ class HomeScreenActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PipOSLauncher(
-    apps: List<LauncherApp>,
-    onLaunch: (String) -> Unit,
-    onOpenSettings: () -> Unit
-) {
+private fun PipOSLauncher(apps: List<LauncherApp>, onLaunch: (String) -> Unit, onOpenSettings: () -> Unit) {
     var search by remember { mutableStateOf("") }
     val filtered = remember(apps, search) { apps.filter { it.label.contains(search, ignoreCase = true) } }
     Surface(modifier = Modifier.fillMaxSize(), color = LauncherBackground) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 22.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
                     Text("PipOS", color = LauncherText, fontSize = 30.sp, fontWeight = FontWeight.Black)
                     Text("ТВОЙ РАБОЧИЙ СТОЛ", color = LauncherAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
@@ -164,32 +152,14 @@ private fun PipOSLauncher(
                 TextButton(onClick = onOpenSettings) { Text("Настройки", color = LauncherAccent) }
             }
             Spacer(Modifier.height(18.dp))
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Найти приложение", color = LauncherMuted) },
-                shape = RoundedCornerShape(16.dp)
-            )
+            OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Найти приложение", color = LauncherMuted) }, shape = RoundedCornerShape(16.dp))
             Spacer(Modifier.height(18.dp))
             Text("ПРИЛОЖЕНИЯ  ·  ${filtered.size}", color = LauncherAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 76.dp),
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 76.dp), modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 items(filtered, key = { it.packageName }) { app ->
-                    Column(
-                        modifier = Modifier.fillMaxWidth().clickable { onLaunch(app.packageName) }.padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box {
-                            Image(bitmap = app.icon.asImageBitmap(), contentDescription = "Иконка ${app.label}", modifier = Modifier.size(58.dp))
-                        }
+                    Column(modifier = Modifier.fillMaxWidth().clickable { onLaunch(app.packageName) }.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box { Image(bitmap = app.icon.asImageBitmap(), contentDescription = "Иконка ${app.label}", modifier = Modifier.size(58.dp)) }
                         Spacer(Modifier.height(6.dp))
                         Text(app.label, color = LauncherText, fontSize = 11.sp, lineHeight = 14.sp, textAlign = TextAlign.Center, maxLines = 2)
                     }

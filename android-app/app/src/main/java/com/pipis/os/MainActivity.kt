@@ -309,7 +309,7 @@ private fun PipOSApp() {
                             }
                         }
                     }
-                    "Главная" -> Text("PipOS Android • версия 0.4.1", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    "Главная" -> Text("PipOS Android • версия 0.3.1", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     else -> Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(selected, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
