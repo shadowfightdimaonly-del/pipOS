@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -82,7 +83,11 @@ private val LauncherAccent = Color(0xFFB58AFF)
 private val LauncherText = Color(0xFFF7F2FF)
 private val LauncherMuted = Color(0xFFB8AEC9)
 
-private data class LauncherApp(val label: String, val packageName: String)
+private data class LauncherApp(
+    val label: String,
+    val packageName: String,
+    val icon: Drawable? = null
+)
 private data class DesktopEntry(
     val title: String,
     val children: List<String> = emptyList(),
@@ -217,7 +222,7 @@ class HomeScreenActivity : ComponentActivity() {
         return results.mapNotNull { info ->
             val activityInfo = info.activityInfo ?: return@mapNotNull null
             if (activityInfo.packageName == packageName) return@mapNotNull null
-            LauncherApp(info.loadLabel(packageManager).toString(), activityInfo.packageName)
+            LauncherApp(info.loadLabel(packageManager).toString(), activityInfo.packageName, info.loadIcon(packageManager))
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 }
@@ -538,7 +543,7 @@ private fun DesktopTile(
         if (entry.isFolder) {
             FolderIcon(entry.title, Modifier.size(54.dp))
         } else {
-            AppIcon(entry.title, isAi, Modifier.size(54.dp))
+            AppIcon(entry.title, isAi, app, Modifier.size(54.dp))
         }
         Spacer(Modifier.height(5.dp))
         Text(
@@ -585,7 +590,7 @@ private fun FolderDialog(
                             .padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AppIcon(name, name in aiApps, Modifier.size(39.dp))
+                        AppIcon(name, name in aiApps, app, Modifier.size(39.dp))
                         Spacer(Modifier.width(12.dp))
                         Text(name, color = LauncherText, fontSize = 13.sp, modifier = Modifier.weight(1f))
                         if (app == null) Text("не найдено", color = LauncherMuted, fontSize = 9.sp)
@@ -674,7 +679,7 @@ private fun AppPickerDialog(
                             .clickable { onSelect(app) }.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AppIcon(app.label, false, Modifier.size(34.dp))
+                        AppIcon(app.label, false, app, Modifier.size(34.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(app.label, color = LauncherText, fontSize = 12.sp)
                     }
@@ -737,23 +742,22 @@ private object DesktopLayoutStore {
 
 @Composable
 private fun FolderIcon(label: String, modifier: Modifier = Modifier) {
-    val paint = remember {
+    val backPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(156, 77, 255)
+            color = android.graphics.Color.rgb(190, 132, 255)
             style = Paint.Style.FILL
         }
     }
-    val path = remember {
-        android.graphics.Path().apply {
-            moveTo(13f, 31f)
-            lineTo(46f, 31f)
-            lineTo(57f, 43f)
-            lineTo(95f, 43f)
-            lineTo(95f, 86f)
-            quadTo(95f, 95f, 86f, 95f)
-            lineTo(18f, 95f)
-            quadTo(11f, 95f, 11f, 86f)
-            close()
+    val frontPaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(132, 62, 224)
+            style = Paint.Style.FILL
+        }
+    }
+    val previewPaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(48, 24, 72)
+            style = Paint.Style.FILL
         }
     }
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -761,48 +765,56 @@ private fun FolderIcon(label: String, modifier: Modifier = Modifier) {
             val canvas = drawContext.canvas.nativeCanvas
             val save = canvas.save()
             canvas.scale(size.width / 108f, size.height / 108f)
-            canvas.drawPath(path, paint)
+
+            val folderBack = android.graphics.Path().apply {
+                moveTo(10f, 28f)
+                lineTo(43f, 28f)
+                lineTo(54f, 39f)
+                lineTo(92f, 39f)
+                quadTo(99f, 39f, 99f, 46f)
+                lineTo(99f, 84f)
+                quadTo(99f, 92f, 91f, 92f)
+                lineTo(17f, 92f)
+                quadTo(9f, 92f, 9f, 84f)
+                lineTo(9f, 36f)
+                quadTo(9f, 28f, 10f, 28f)
+                close()
+            }
+            canvas.drawPath(folderBack, backPaint)
+            canvas.drawRoundRect(8f, 43f, 100f, 96f, 13f, 13f, frontPaint)
+
+            // Four tiny tiles make the folder contents immediately recognizable.
+            canvas.drawRoundRect(29f, 56f, 48f, 74f, 5f, 5f, previewPaint)
+            canvas.drawRoundRect(55f, 56f, 74f, 74f, 5f, 5f, previewPaint)
+            canvas.drawRoundRect(29f, 78f, 48f, 91f, 4f, 4f, previewPaint)
+            canvas.drawRoundRect(55f, 78f, 74f, 91f, 4f, 4f, previewPaint)
             canvas.restoreToCount(save)
         }
-        Text(label.take(1).uppercase(Locale.getDefault()), color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.Black)
     }
 }
 
 @Composable
-private fun AppIcon(label: String, isAi: Boolean, modifier: Modifier = Modifier) {
+private fun AppIcon(
+    label: String,
+    isAi: Boolean,
+    app: LauncherApp? = null,
+    modifier: Modifier = Modifier
+) {
     val symbol = remember(label) { iconSymbol(label) }
-    val bg = remember {
+    val drawable = remember(app?.packageName) {
+        app?.icon?.constantState?.newDrawable()?.mutate() ?: app?.icon?.mutate()
+    }
+    val backgroundPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.BLACK
+            color = android.graphics.Color.rgb(35, 23, 49)
             style = Paint.Style.FILL
         }
     }
-    val purple = remember {
+    val fallbackPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(156, 77, 255)
-            style = Paint.Style.FILL
-        }
-    }
-    val glyph = remember(symbol) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.BLACK
+            color = android.graphics.Color.WHITE
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
-            textSize = when {
-                symbol.length >= 4 -> 14f
-                symbol.length == 3 -> 18f
-                symbol.length == 2 -> 24f
-                else -> 32f
-            }
-        }
-    }
-    val iconPath = remember {
-        android.graphics.Path().apply {
-            moveTo(30f, 35f); lineTo(48f, 35f); lineTo(54f, 42f); lineTo(78f, 42f)
-            cubicTo(79.7f, 42f, 81f, 43.3f, 81f, 45f); lineTo(81f, 73f)
-            cubicTo(81f, 74.7f, 79.7f, 76f, 78f, 76f); lineTo(30f, 76f)
-            cubicTo(28.3f, 76f, 27f, 74.7f, 27f, 73f); lineTo(27f, 38f)
-            cubicTo(27f, 36.3f, 28.3f, 35f, 30f, 35f); close()
         }
     }
     val badgePaint = remember {
@@ -819,22 +831,37 @@ private fun AppIcon(label: String, isAi: Boolean, modifier: Modifier = Modifier)
             typeface = Typeface.DEFAULT_BOLD
         }
     }
+
     Canvas(modifier = modifier) {
         val canvas = drawContext.canvas.nativeCanvas
         val save = canvas.save()
         canvas.scale(size.width / 108f, size.height / 108f)
-        canvas.drawRoundRect(2f, 2f, 106f, 106f, 25f, 25f, bg)
-        canvas.drawPath(iconPath, purple)
-        val baseline = 59f - (glyph.ascent() + glyph.descent()) / 2f
-        canvas.drawText(symbol, 54f, baseline, glyph)
+        canvas.drawRoundRect(3f, 3f, 105f, 105f, 25f, 25f, backgroundPaint)
+
+        if (drawable != null) {
+            val iconSave = canvas.save()
+            canvas.clipRect(8f, 8f, 100f, 100f)
+            drawable.setBounds(8, 8, 100, 100)
+            drawable.draw(canvas)
+            canvas.restoreToCount(iconSave)
+        } else {
+            fallbackPaint.textSize = when {
+                symbol.length >= 4 -> 17f
+                symbol.length == 3 -> 22f
+                symbol.length == 2 -> 29f
+                else -> 39f
+            }
+            val baseline = 54f - (fallbackPaint.ascent() + fallbackPaint.descent()) / 2f
+            canvas.drawText(symbol, 54f, baseline, fallbackPaint)
+        }
+
         if (isAi) {
-            canvas.drawCircle(87f, 20f, 13f, badgePaint)
-            canvas.drawText("★", 87f, 27f, starPaint)
+            canvas.drawCircle(88f, 20f, 13f, badgePaint)
+            canvas.drawText("★", 88f, 27f, starPaint)
         }
         canvas.restoreToCount(save)
     }
 }
-
 
 
 private fun normalize(value: String): String =
