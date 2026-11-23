@@ -406,7 +406,7 @@ private fun FolderIcon(label: String, modifier: Modifier = Modifier) {
                 lineTo(size.width * .88f, size.height * .80f)
                 quadTo(size.width * .88f, size.height * .88f, size.width * .79f, size.height * .88f)
                 lineTo(size.width * .17f, size.height * .88f)
-                quadraticTo(size.width * .10f, size.height * .88f, size.width * .10f, size.height * .80f)
+                quadTo(size.width * .10f, size.height * .88f, size.width * .10f, size.height * .80f)
                 close()
             }
             drawContext.canvas.nativeCanvas.drawPath(path, p)
