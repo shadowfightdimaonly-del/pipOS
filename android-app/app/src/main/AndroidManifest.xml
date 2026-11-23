@@ -15,7 +15,7 @@
         <activity
             android:name=".HomeScreenActivity"
             android:exported="true"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:label="PipOS Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
