@@ -80,6 +80,35 @@ private data class DesktopEntry(val title: String, val children: List<String> = 
     val isFolder: Boolean get() = children.isNotEmpty()
 }
 
+private class AppLookup(apps: List<LauncherApp>) {
+    private val normalizedApps = apps.map { it to normalize(it.label) }
+    private val exactApps = HashMap<String, LauncherApp>(apps.size).apply {
+        normalizedApps.forEach { (app, key) -> putIfAbsent(key, app) }
+    }
+
+    fun find(requested: String): LauncherApp? {
+        val key = normalize(requested)
+        val aliases = when (key) {
+            "ytmusic" -> listOf("youtubemusic", "ytmusic")
+            "googleplay" -> listOf("playstore", "googleplay")
+            "тбанк" -> listOf("тбанк", "тинькофф")
+            "телефон" -> listOf("телефон", "phone")
+            "фото" -> listOf("фото", "photos", "галерея")
+            "заморозка" -> listOf("заморозка", "freeze")
+            "lotuslantern" -> listOf("lotuslantern")
+            "pipis" -> listOf("pipos")
+            else -> listOf(key)
+        }
+
+        aliases.forEach { alias -> exactApps[alias]?.let { return it } }
+        return normalizedApps.firstOrNull { (_, label) ->
+            label.length > 3 && aliases.any { alias ->
+                alias.length > 3 && (label.contains(alias) || alias.contains(label))
+            }
+        }?.first
+    }
+}
+
 private val trashApps = listOf(
     "YT Music", "Галерея", "Калькулятор", "Файлы", "Погода", "Диспетчер файлов",
     "Диктофон", "Заметки", "Часы", "Камера", "Календарь", "Плеер Visha", "SIM-меню",
@@ -190,6 +219,7 @@ private fun PipOSLauncher(
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
     val page = pagerState.currentPage
+    val appLookup = remember(apps) { AppLookup(apps) }
     var openedFolder by remember { mutableStateOf<DesktopEntry?>(null) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = LauncherBackground) {
@@ -235,7 +265,7 @@ private fun PipOSLauncher(
                                             DesktopTile(
                                                 entry = entry,
                                                 isAi = entry.title == "Штаб ИИ",
-                                                app = findApp(entry.title, apps),
+                                                app = appLookup.find(entry.title),
                                                 onOpenFolder = { openedFolder = entry },
                                                 onLaunch = onLaunch,
                                                 onOpenSettings = onOpenSettings
@@ -282,7 +312,7 @@ private fun PipOSLauncher(
     openedFolder?.let { folder ->
         FolderDialog(
             folder = folder,
-            apps = apps,
+            appLookup = appLookup,
             onDismiss = { openedFolder = null },
             onLaunch = { packageName ->
                 openedFolder = null
@@ -425,7 +455,7 @@ private fun DockFolder(folder: DesktopEntry, onClick: () -> Unit) {
 @Composable
 private fun FolderDialog(
     folder: DesktopEntry,
-    apps: List<LauncherApp>,
+    appLookup: AppLookup,
     onDismiss: () -> Unit,
     onLaunch: (String) -> Unit
 ) {
@@ -440,7 +470,7 @@ private fun FolderDialog(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 items(folder.children) { name ->
-                    val app = findApp(name, apps)
+                    val app = appLookup.find(name)
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = app != null) { app?.let { onLaunch(it.packageName) } }
@@ -561,27 +591,7 @@ private fun AppIcon(label: String, isAi: Boolean, modifier: Modifier = Modifier)
     }
 }
 
-private fun findApp(requested: String, apps: List<LauncherApp>): LauncherApp? {
-    val key = normalize(requested)
-    val aliases = when (key) {
-        "yt music" -> listOf("youtube music", "yt music")
-        "google play" -> listOf("play store", "google play")
-        "тбанк" -> listOf("т-банк", "тинькофф")
-        "телефон" -> listOf("телефон", "phone")
-        "фото" -> listOf("фото", "photos", "галерея")
-        "заморозка" -> listOf("заморозка", "freeze")
-        "lotus lantern" -> listOf("lotus lantern")
-        "pipis" -> listOf("pipos")
-        else -> listOf(key)
-    }
-    return apps.firstOrNull { normalize(it.label) in aliases }
-        ?: apps.firstOrNull { candidate ->
-            val label = normalize(candidate.label)
-            label.length > 3 && aliases.any { alias ->
-                alias.length > 3 && (label.contains(alias) || alias.contains(label))
-            }
-        }
-}
+
 
 private fun normalize(value: String): String =
     value.lowercase(Locale.ROOT).replace("ё", "е").replace(Regex("[^\\p{L}\\p{N}]"), "")
