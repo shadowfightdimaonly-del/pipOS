@@ -54,18 +54,7 @@ class PipOSNotificationListener : NotificationListenerService() {
         }.getOrNull()
 
         handler.post {
-            val displayed = showCard(
-                appName,
-                sender?.toString().orEmpty(),
-                message?.toString().orEmpty(),
-                avatar,
-                notification.contentIntent
-            )
-            // Replace the system notification only after the PipOS overlay is on screen.
-            // This also removes it from the notification shade.
-            if (displayed) {
-                runCatching { cancelNotification(sbn.key) }
-            }
+            showCard(appName, sender?.toString().orEmpty(), message?.toString().orEmpty(), avatar, notification.contentIntent)
         }
     }
 
@@ -79,9 +68,9 @@ class PipOSNotificationListener : NotificationListenerService() {
         message: String,
         avatar: android.graphics.drawable.Drawable?,
         contentIntent: android.app.PendingIntent?
-    ): Boolean {
-        val wm = windowManager ?: return false
-        if (!android.provider.Settings.canDrawOverlays(this)) return false
+    ) {
+        val wm = windowManager ?: return
+        if (!android.provider.Settings.canDrawOverlays(this)) return
         removeCurrentCard()
 
         val accent = Color.rgb(181, 138, 255)
@@ -202,7 +191,7 @@ class PipOSNotificationListener : NotificationListenerService() {
             width = WindowManager.LayoutParams.MATCH_PARENT
         }
 
-        return runCatching {
+        runCatching {
             wm.addView(outer, params)
             currentCard = outer
             outer.animate()
@@ -227,10 +216,8 @@ class PipOSNotificationListener : NotificationListenerService() {
             val dismiss = Runnable { removeCurrentCard() }
             dismissRunnable = dismiss
             handler.postDelayed(dismiss, 5_000L)
-            true
-        }.getOrElse {
+        }.onFailure {
             currentCard = null
-            false
         }
     }
 
