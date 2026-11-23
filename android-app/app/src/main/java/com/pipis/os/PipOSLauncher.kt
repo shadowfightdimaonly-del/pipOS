@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,12 +53,15 @@ private val LauncherMuted = Color(0xFFB8AEC9)
 private data class LauncherApp(val label: String, val packageName: String)
 
 class HomeScreenActivity : ComponentActivity() {
+    private var currentApps by mutableStateOf<List<LauncherApp>>(emptyList())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        refreshApps()
         setContent {
             MaterialTheme {
                 PipOSLauncher(
-                    apps = loadLauncherApps(),
+                    apps = currentApps,
                     onLaunch = { packageName ->
                         packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it) }
                     },
@@ -65,15 +71,20 @@ class HomeScreenActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshApps()
+    }
+
     @Suppress("DEPRECATION")
-    private fun loadLauncherApps(): List<LauncherApp> {
+    private fun refreshApps() {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val results = if (Build.VERSION.SDK_INT >= 33) {
             packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
         } else {
             packageManager.queryIntentActivities(intent, 0)
         }
-        return results.mapNotNull { info ->
+        currentApps = results.mapNotNull { info ->
             val activityInfo = info.activityInfo ?: return@mapNotNull null
             if (activityInfo.packageName == packageName) return@mapNotNull null
             LauncherApp(info.loadLabel(packageManager).toString(), activityInfo.packageName)
@@ -130,12 +141,7 @@ private fun PipOSLauncher(
                             modifier = Modifier.size(58.dp).background(LauncherPurple, RoundedCornerShape(19.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = app.label.firstOrNull()?.uppercase() ?: "•",
-                                color = LauncherAccent,
-                                fontSize = 27.sp,
-                                fontWeight = FontWeight.Black
-                            )
+                            GeneratedAppGlyph(app = app)
                         }
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -150,12 +156,72 @@ private fun PipOSLauncher(
                 }
             }
             Text(
-                "Чёрный фон · Глубокий фиолетовый",
+                "Автоиконки PipOS · Чёрный + глубокий фиолетовый",
                 color = LauncherMuted,
                 fontSize = 10.sp,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+@Composable
+private fun GeneratedAppGlyph(app: LauncherApp) {
+    val p = app.packageName.lowercase()
+    val label = app.label.lowercase()
+    val kind = when {
+        listOf("openai", "chatgpt", "anthropic", "claude", "gemini", "grok", "deepseek", "copilot").any { p.contains(it) || label.contains(it) } -> "ai"
+        p.contains("youtube") || label.contains("youtube") -> "youtube"
+        p.contains("tiktok") || label.contains("tiktok") -> "tiktok"
+        p.contains("minecraft") || label.contains("minecraft") -> "minecraft"
+        p.contains("github") || label.contains("github") -> "github"
+        listOf("settings", "systemui", "phone", "contacts", "camera", "calendar", "clock", "messages").any { p.contains(it) || label.contains(it) } -> "system"
+        else -> "generic"
+    }
+    val glyph = when (kind) {
+        "ai" -> "♛"
+        "youtube" -> "▶"
+        "tiktok" -> "♪"
+        "minecraft" -> "◆"
+        "github" -> "●"
+        "system" -> "✦"
+        else -> app.label.firstOrNull()?.uppercase() ?: "•"
+    }
+    if (kind == "minecraft" || kind == "github") {
+        Canvas(Modifier.size(39.dp)) {
+            val c = LauncherAccent
+            if (kind == "minecraft") {
+                val path = Path().apply {
+                    moveTo(size.width * .5f, size.height * .08f)
+                    lineTo(size.width * .91f, size.height * .30f)
+                    lineTo(size.width * .5f, size.height * .53f)
+                    lineTo(size.width * .09f, size.height * .30f)
+                    close()
+                    moveTo(size.width * .09f, size.height * .30f)
+                    lineTo(size.width * .09f, size.height * .72f)
+                    lineTo(size.width * .5f, size.height * .94f)
+                    lineTo(size.width * .5f, size.height * .53f)
+                    moveTo(size.width * .91f, size.height * .30f)
+                    lineTo(size.width * .91f, size.height * .72f)
+                    lineTo(size.width * .5f, size.height * .94f)
+                }
+                drawPath(path, c, style = Stroke(width = 3.2f))
+            } else {
+                drawCircle(c, radius = size.minDimension * .32f, center = center, style = Stroke(width = 3.2f))
+                drawCircle(c, radius = size.minDimension * .10f, center = center)
+                val ears = Path().apply {
+                    moveTo(size.width * .27f, size.height * .30f)
+                    lineTo(size.width * .19f, size.height * .06f)
+                    lineTo(size.width * .43f, size.height * .21f)
+                    moveTo(size.width * .73f, size.height * .30f)
+                    lineTo(size.width * .81f, size.height * .06f)
+                    lineTo(size.width * .57f, size.height * .21f)
+                }
+                drawPath(ears, c, style = Stroke(width = 3.2f))
+            }
+        }
+    } else {
+        Text(glyph, color = LauncherAccent, fontSize = if (kind == "ai") 34.sp else 29.sp, fontWeight = FontWeight.Black)
     }
 }
