@@ -8,8 +8,10 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,7 +50,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,6 +72,16 @@ class HomeScreenActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Keep Android's own navigation bar outside the launcher content.
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        window.clearFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+        window.navigationBarColor = android.graphics.Color.BLACK
+        window.statusBarColor = android.graphics.Color.rgb(8, 6, 13)
+
         setContent {
             MaterialTheme {
                 PipOSLauncher(
@@ -81,7 +97,12 @@ class HomeScreenActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        launcherApps = loadLauncherApps()
+        // PackageManager queries and label loading can take noticeable time.
+        // Run discovery away from the UI thread so the launcher stays responsive.
+        lifecycleScope.launch {
+            val loadedApps = withContext(Dispatchers.IO) { loadLauncherApps() }
+            launcherApps = loadedApps
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -141,23 +162,6 @@ private fun PipOSLauncher(
     onOpenSettings: () -> Unit
 ) {
     var search by remember { mutableStateOf("") }
-    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1_000)
-        }
-    }
-
-    val timeText = remember(currentTime) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(currentTime))
-    }
-    val dateText = remember(currentTime) {
-        SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
-            .format(Date(currentTime))
-            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-    }
     val filtered = remember(apps, search) {
         apps.filter { it.label.contains(search, ignoreCase = true) }
     }
@@ -182,16 +186,7 @@ private fun PipOSLauncher(
 
             Spacer(Modifier.height(20.dp))
 
-            Column(
-                modifier = Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(LauncherPanel)
-                    .padding(horizontal = 20.dp, vertical = 18.dp)
-            ) {
-                Text(timeText, color = LauncherText, fontSize = 66.sp, lineHeight = 72.sp, fontWeight = FontWeight.Light)
-                Spacer(Modifier.height(2.dp))
-                Text(dateText, color = LauncherAccent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            }
+            ClockCard()
 
             Spacer(Modifier.height(18.dp))
 
@@ -258,22 +253,50 @@ private fun PipOSLauncher(
 }
 
 
+
+@Composable
+private fun ClockCard() {
+    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = System.currentTimeMillis()
+            delay(60_000)
+        }
+    }
+
+    val timeText = remember(currentTime) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(currentTime))
+    }
+    val dateText = remember(currentTime) {
+        SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
+            .format(Date(currentTime))
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(LauncherPanel)
+            .padding(horizontal = 20.dp, vertical = 18.dp)
+    ) {
+        Text(timeText, color = LauncherText, fontSize = 66.sp, lineHeight = 72.sp, fontWeight = FontWeight.Light)
+        Spacer(Modifier.height(2.dp))
+        Text(dateText, color = LauncherAccent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
 @Composable
 private fun PipOSAppIcon(app: LauncherApp, modifier: Modifier = Modifier) {
     val symbol = remember(app.packageName, app.label) { appSymbol(app.packageName, app.label) }
-    Canvas(modifier = modifier) {
-        val native = drawContext.canvas.nativeCanvas
-        val save = native.save()
-        native.scale(size.width / 108f, size.height / 108f)
-
-        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val background = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.BLACK
             style = Paint.Style.FILL
         }
-        native.drawRoundRect(2f, 2f, 106f, 106f, 25f, 25f, background)
-
-        // The same purple folder silhouette used by PipisEdit.
-        val folder = Path().apply {
+    }
+    val folder = remember {
+        Path().apply {
             moveTo(30f, 35f)
             lineTo(48f, 35f)
             lineTo(54f, 42f)
@@ -287,13 +310,15 @@ private fun PipOSAppIcon(app: LauncherApp, modifier: Modifier = Modifier) {
             cubicTo(27f, 36.3f, 28.3f, 35f, 30f, 35f)
             close()
         }
-        val purple = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    }
+    val purple = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.rgb(156, 77, 255)
             style = Paint.Style.FILL
         }
-        native.drawPath(folder, purple)
-
-        val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    }
+    val glyph = remember(symbol) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.BLACK
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
@@ -304,6 +329,17 @@ private fun PipOSAppIcon(app: LauncherApp, modifier: Modifier = Modifier) {
                 else -> 34f
             }
         }
+    }
+
+    Canvas(modifier = modifier) {
+        val native = drawContext.canvas.nativeCanvas
+        val save = native.save()
+        native.scale(size.width / 108f, size.height / 108f)
+
+        native.drawRoundRect(2f, 2f, 106f, 106f, 25f, 25f, background)
+
+        // Reuse cached drawing objects instead of allocating them on every redraw.
+        native.drawPath(folder, purple)
         val baseline = 59f - (glyph.ascent() + glyph.descent()) / 2f
         native.drawText(symbol, 54f, baseline, glyph)
         native.restoreToCount(save)
