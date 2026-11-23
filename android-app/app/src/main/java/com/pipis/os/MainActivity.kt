@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
 
 private val Background = Color(0xFF09070F)
@@ -339,7 +340,7 @@ private fun PipOSApp() {
                                                     val iconBitmap = Bitmap.createScaledBitmap(bitmap, 192, 192, true)
                                                     val shortcut = ShortcutInfo.Builder(context, "pipos_${app.packageName}")
                                                         .setShortLabel(app.label.take(10))
-                                                        .setLongLabel(app.label)
+                                                        .setLongLabel(app.label.take(25))
                                                         .setIntent(launchIntent)
                                                         .setIcon(Icon.createWithBitmap(iconBitmap))
                                                         .build()
